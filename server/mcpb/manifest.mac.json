@@ -1,0 +1,80 @@
+{
+  "manifest_version": "0.3",
+  "name": "claudy",
+  "display_name": "Claudy",
+  "version": "0.1.26",
+  "description": "Claude 채팅에서 이 Mac와 SSH 서버의 명령, Claude Code(claude -p)를 실행한다.",
+  "long_description": "Claudy 는 Rust 로 만든 로컬 MCP 서버다. 등록한 호스트(이 컴퓨터 또는 SSH 서버)에서 셸 명령을 실행하고, Claude Code 에 프롬프트를 보내 결과를 받는다. 긴 작업은 백그라운드로 띄워 상태를 확인할 수 있다. 호스트 설정은 사용자 폴더의 .claudy/hosts.toml 에 둔다.",
+  "author": {
+    "name": "SHIN"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/claudy",
+    "mcp_config": {
+      "command": "${__dirname}/server/claudy",
+      "args": [],
+      "env": {}
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin"
+    ]
+  },
+  "tools": [
+    {
+      "name": "hosts_list",
+      "description": "등록된 호스트 목록과 설정 파일 경로를 보여준다."
+    },
+    {
+      "name": "run_command",
+      "description": "등록된 호스트에서 셸 명령을 실행하고 출력, 종료 코드, 소요 시간을 돌려준다."
+    },
+    {
+      "name": "claude_ask",
+      "description": "호스트의 Claude Code(claude -p)에 프롬프트를 보내고 결과를 돌려준다. resume_id 로 대화를 이어간다."
+    },
+    {
+      "name": "ego_run",
+      "description": "ego 브라우저를 Node 스크립트로 직접 조작한다."
+    },
+    {
+      "name": "job_start",
+      "description": "명령 또는 Claude Code 작업을 백그라운드로 띄우고 job_id 를 돌려준다."
+    },
+    {
+      "name": "job_status",
+      "description": "백그라운드 작업의 상태와 로그 끝부분을 보여준다."
+    },
+    {
+      "name": "job_list",
+      "description": "최근 백그라운드 작업 20개를 보여준다."
+    },
+    {
+      "name": "app_open",
+      "description": "호스트의 사용자 화면에 창이 있는 프로그램을 띄운다(원격 Windows 는 대화형 예약 작업, macOS 는 open -a)."
+    },
+    {
+      "name": "file_copy",
+      "description": "호스트 사이(이 PC·ssh·경유·Windows)에서 파일이나 폴더를 복사한다."
+    },
+    {
+      "name": "claudy_update",
+      "description": "Windows 호스트의 Claudy 서버·설정 앱을 새 판으로 바꾸고 터널이 다시 붙는지 확인한다. 실패하면 되돌린다."
+    },
+    {
+      "name": "host_status",
+      "description": "호스트의 Claudy 서버·설정 앱 판, 터널 설정과 기록, 갱신 기록을 본다."
+    },
+    {
+      "name": "screen_capture",
+      "description": "호스트의 사용자 화면을 찍어 그림으로 돌려준다."
+    },
+    {
+      "name": "browser_run",
+      "description": "Chrome·Edge·Aside 를 조작용 프로필로 띄우고 Playwright(CDP)로 조작"
+    }
+  ]
+}

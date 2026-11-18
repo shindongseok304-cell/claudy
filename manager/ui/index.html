@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claudy 설정</title>
+<style>
+
+:root{
+  /* 8pt grid tokens */
+  --u1:4px; --u2:8px; --u3:12px; --u4:16px; --u5:20px; --u6:24px;
+  --row:44px; --pad:16px; --card-r:12px; --ctl:28px; --ico:20px; --gap-grp:24px;
+  --side-w:200px; --title-h:32px; --hdr-h:44px; --th-h:32px; --tr-h:40px; --content-px:20px;
+  /* colors */
+  --win:#F2F2F7; --side:#ECECF1; --card:#FFFFFF; --txt:#1C1C1E; --sub:#8E8E93; --sep:#E5E5EA;
+  --acc:#3B6FD4; --del:#FF4B43; --ok:#34C759; --btn:#E8E8ED; --seg:#E4E4E9; --chip:#FFFFFF;
+  --search:rgba(118,118,128,.12); --selrow:rgba(59,111,212,.10); --hover:rgba(128,128,128,.07);
+  --cardsh:0 0 0 .5px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.025);
+  --page:#D6D8DE; --knob:#fff; --off:#D1D1D6;
+  --font:Pretendard,'Pretendard Variable','Segoe UI Variable','Malgun Gothic',system-ui,'Noto Sans CJK KR',sans-serif;
+  --mono:'Cascadia Mono',Consolas,'D2Coding',ui-monospace,'Noto Sans Mono CJK KR',monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --win:#1C1C1E; --side:#232325; --card:#2C2C2E; --txt:#F2F2F7; --sub:#98989F; --sep:#38383A;
+    --btn:#3A3A3C; --seg:#3A3A3C; --chip:#636366; --search:rgba(118,118,128,.24); --selrow:#3A3A3C; --hover:rgba(255,255,255,.04);
+    --cardsh:0 0 0 .5px rgba(255,255,255,.04); --page:#0E0E10; --off:#48484A;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--page)}
+body{font-family:var(--font);color:var(--txt);font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:default}
+svg{display:block;flex:none}
+/* macOS 에서는 시스템 글꼴(SF Pro, Apple SD 산돌고딕 Neo)을 쓴다 */
+html.mac{--font:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;--mono:'SF Mono',Menlo,ui-monospace,monospace}
+/* macOS 세부 (Gemini 점검 2026.11.06. 반영): 시스템 파랑, 작은 토글·단추, 왼쪽 정렬 상세 제목 */
+html.mac{--acc:#007AFF;--mbtn:#FFFFFF;--mbtnsh:0 0 0 .5px rgba(0,0,0,.14),0 .5px 1px rgba(0,0,0,.10)}
+@media (prefers-color-scheme:dark){html.mac{--acc:#0A84FF;--mbtn:#656569;--mbtnsh:0 0 0 .5px rgba(255,255,255,.06),0 .5px 1px rgba(0,0,0,.3)}}
+html.mac .hdr h1{font-weight:700}
+html.mac .hdr.sub{display:flex;gap:4px}
+html.mac .hdr.sub .back span{display:none}
+html.mac .hdr.sub .back{width:24px;justify-content:center;margin-left:-6px}
+html.mac .tg{width:32px;height:19px;border-radius:10px}
+html.mac .tg::after{width:15px;height:15px;box-shadow:0 1px 2px rgba(0,0,0,.2),0 0 0 .5px rgba(0,0,0,.04)}
+html.mac .tg.on::after{transform:translateX(13px)}
+html.mac .btn{height:22px;border-radius:6px;padding:0 10px}
+html.mac .btn.sec{background:var(--mbtn);box-shadow:var(--mbtnsh)}
+html.mac .btn.sec:active{filter:brightness(.94)}
+html.mac .btn.del{box-shadow:none}
+html.mac .seg{height:22px;padding:1px;border-radius:6px}
+html.mac .seg button{height:20px;padding:0 11px}
+html.mac .thead{font-size:11px}
+.row.startup{height:auto;min-height:var(--row);align-items:flex-start;gap:10px;padding-top:10px;padding-bottom:10px}
+.ta{flex:1;min-width:0;min-height:84px;resize:vertical;border:0;outline:0;border-radius:6px;padding:6px 8px;background:var(--search);color:var(--txt);font-size:12px;line-height:18px}
+.ta:focus{box-shadow:0 0 0 3px rgba(0,122,255,.25)}
+.in.vf{background:var(--search);border-radius:6px;font-size:13px;height:26px}
+.in.pw{background:var(--search);text-align:left;margin-right:8px;font-size:13px;height:24px}
+html.mac .hsel{appearance:none;-webkit-appearance:none;height:22px;padding:0 24px 0 9px;border-radius:6px;background-color:var(--mbtn);box-shadow:var(--mbtnsh);background-repeat:no-repeat;background-position:right 7px center;background-size:8px 12px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 12'%3E%3Cpath d='M1.5 4.5L4 2l2.5 2.5M1.5 7.5L4 10l2.5-2.5' fill='none' stroke='%238E8E93' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+
+.wbody{flex:1;display:flex;min-height:0}
+aside{width:var(--side-w);flex:none;background:var(--side);border-right:1px solid var(--sep);display:flex;flex-direction:column;overflow-y:auto;padding:4px 8px 12px}
+.prog{display:flex;align-items:center;gap:12px;padding:8px 8px 16px}
+.prog .n{font-size:14px;font-weight:600;line-height:16px}
+.prog .s{font-size:12px;color:var(--sub);line-height:16px}
+.sg{display:flex;flex-direction:column;gap:4px;margin-bottom:16px}
+.si{height:var(--ctl);border-radius:6px;display:flex;align-items:center;gap:8px;padding:0 8px;font-size:13px;line-height:20px;text-align:left;width:100%}
+.si .nm{display:block;height:20px;line-height:20px}
+.si:hover{background:rgba(128,128,128,.12)}
+.si.on,.si.on:hover{background:var(--acc);color:#fff}
+.ib20{width:var(--ico);height:var(--ico);border-radius:5px;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;box-shadow:inset 0 1px 0 var(--sep)}
+.hdr{height:var(--hdr-h);flex:none;display:flex;align-items:center;padding:20px var(--content-px) 0}
+.hdr h1{font-size:17px;font-weight:600;letter-spacing:-.01em;line-height:24px}
+.hdr.sub{display:grid;grid-template-columns:1fr auto 1fr}
+.hdr .back{height:24px;margin-left:-4px;padding:0 4px;border-radius:6px;display:flex;align-items:center;color:var(--acc);font-size:13px;justify-self:start}
+.hdr .back:hover{background:var(--hover)}
+.saved{margin-left:auto;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:4px;opacity:0;transition:opacity .25s;justify-self:end}
+.saved.show{opacity:1}
+.scroll{flex:1;overflow-y:auto;padding:16px var(--content-px) 24px}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:4px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+.grp{margin-bottom:var(--gap-grp)}
+.gt{font-size:13px;font-weight:600;color:var(--sub);padding-left:var(--pad);margin:0 0 8px;line-height:16px}
+.note{font-size:12px;color:var(--sub);padding:8px var(--pad) 0;line-height:16px}
+.card{background:var(--card);border-radius:var(--card-r);box-shadow:var(--cardsh);overflow:hidden}
+.row{position:relative;height:var(--row);padding:0 var(--pad);display:flex;align-items:center;gap:12px;width:100%;text-align:left}
+.row + .row::before,.trow + .trow::before{content:"";position:absolute;left:var(--inset,var(--pad));right:0;top:0;height:1px;background:var(--sep)}
+.row.click:hover,.trow.click:hover{background:var(--hover)}
+.row.sel,.trow.sel,.row.sel:hover,.trow.sel:hover{background:var(--selrow)}
+.row.add{gap:8px;--inset:44px;color:var(--acc)}
+.row.add .ico{width:var(--ico);height:var(--ico);display:flex;align-items:center;justify-content:center;flex:none}
+.row.add.plain{color:var(--txt)}.row.add.plain .ico{color:var(--sub)}
+.row.center{justify-content:center;color:var(--del)}
+.lbl{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.lbl .t{font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbl .d{font-size:12px;line-height:16px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mono{font-family:var(--mono)}
+.rt{display:flex;align-items:center;gap:8px;flex:none;max-width:80%}
+.val{color:var(--sub);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:248px}
+.chev{color:var(--sub);opacity:.7}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--sub);flex:none;display:inline-block}
+.dot.ok{background:var(--ok)}.dot.fail{background:var(--del)}.dot.run{background:var(--acc)}.dot.idle{background:var(--sub)}
+
+.tg{width:40px;height:24px;border-radius:12px;background:var(--off);position:relative;transition:background .18s;flex:none}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--knob);box-shadow:0 1px 1px rgba(0,0,0,.14);transition:transform .18s}
+.tg.on{background:var(--acc)}.tg.on::after{transform:translateX(16px)}
+.seg{display:inline-flex;height:var(--ctl);padding:2px;border-radius:7px;background:var(--seg)}
+.seg button{height:24px;padding:0 12px;border-radius:5px;font-size:13px;color:var(--txt)}
+.seg button.on{background:var(--chip);box-shadow:0 .5px 2px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.04)}
+.in{height:var(--ctl);border-radius:6px;background:transparent;border:0;outline:0;padding:0 8px;margin-right:-8px;font:inherit;font-size:14px;color:var(--txt);width:224px;text-align:right}
+.in:focus{box-shadow:0 0 0 3px rgba(59,111,212,.20)}
+.in::placeholder{color:var(--sub)}
+.in.mono{font-family:var(--mono);font-size:12px;text-align:left;margin-right:0;width:100%}
+.btn{height:var(--ctl);padding:0 12px;border-radius:6px;font-size:13px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex:none}
+.btn.sec{background:var(--btn)}.btn.sec:hover{filter:brightness(.96)}
+.btn.pri{background:var(--acc);color:#fff}.btn.pri:hover{filter:brightness(1.07)}
+.btn.del{color:var(--del);padding:0 8px;margin-right:-8px}.btn.del:hover{background:rgba(255,75,67,.10)}
+.btn:active{transform:translateY(.5px)}
+.ib{width:var(--ctl);height:var(--ctl);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--sub)}
+.ib:hover{background:var(--btn);color:var(--txt)}
+.ib[disabled]{opacity:.3;pointer-events:none}
+.minus{width:20px;height:20px;border-radius:50%;background:var(--del);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.minus:hover{filter:brightness(1.08)}
+.ok-msg{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:8px}
+
+.bar{display:flex;align-items:center;gap:8px;height:var(--ctl);margin-bottom:16px}
+.datenav{display:flex;align-items:center;gap:0;font-size:14px;font-weight:500;margin-left:-8px}
+.datenav span{padding:0 4px;min-width:176px;text-align:center}
+.srch{margin-left:auto;position:relative;display:flex;align-items:center;height:var(--ctl)}
+.srch svg{position:absolute;left:8px;top:6px;color:var(--sub);pointer-events:none}
+.srch .in{display:block;height:var(--ctl)}
+.srch .in{width:160px;padding-left:32px;margin-right:0;background:var(--search);text-align:left;font-size:13px}
+.thead,.trow{display:grid;grid-template-columns:56px 120px 88px 112px 1fr;align-items:center;padding:0 var(--pad)}
+.thead{position:relative;height:var(--th-h);font-size:12px;font-weight:600;color:var(--sub)}
+.thead::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--sep)}
+.trow{position:relative;height:var(--tr-h);font-size:13px}
+.trow > *{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .tm{font-variant-numeric:tabular-nums}
+.trow .tool{font-family:var(--mono);font-size:12px}
+.trow .dur,.thead .dur{text-align:right}
+.trow .dur{color:var(--sub);font-variant-numeric:tabular-nums}
+.bd{display:inline-flex;align-items:center;gap:8px;font-size:12px}
+.empty{padding:32px var(--pad);text-align:center;color:var(--sub);font-size:13px}
+.detail{padding:12px var(--pad)}
+.detail .cmd{font-family:var(--mono);font-size:12px;line-height:20px;word-break:break-all}
+.detail .meta{font-size:12px;color:var(--sub);margin-top:4px;display:flex;gap:8px;align-items:center}
+.logbox{padding:12px var(--pad);font-family:var(--mono);font-size:12px;line-height:20px;max-height:160px;overflow:auto;white-space:pre;color:var(--txt)}
+.jrow{display:grid;grid-template-columns:64px 88px 1fr auto;align-items:center;column-gap:8px;width:100%}
+.jrow .no{font-family:var(--mono);font-size:13px}
+.jrow .sub{color:var(--sub);font-size:13px}
+.rx{flex:1;min-width:0;font-family:var(--mono);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 실제 앱용 추가 규칙 */
+@font-face{font-family:Pretendard;font-weight:400;font-style:normal;font-display:block;src:local('Pretendard'),url(fonts/Pretendard-Regular.woff2) format('woff2')}
+@font-face{font-family:Pretendard;font-weight:600;font-style:normal;font-display:block;src:local('Pretendard SemiBold'),url(fonts/Pretendard-SemiBold.woff2) format('woff2')}
+:root{--errtxt:#D93025}
+@media (prefers-color-scheme:dark){:root{--errtxt:#FF6A61}}
+html,body{height:100%;overflow:hidden;background:var(--win);user-select:none;-webkit-user-select:none}
+input,.logbox,.cmd,.rowerr,.note{user-select:text;-webkit-user-select:text}
+.wbody{height:100vh}
+.prog .s{display:flex;align-items:center;gap:6px}
+.prog .s .dot{width:6px;height:6px}
+.rowerr{display:none;padding:0 var(--pad) 8px;margin-top:-4px;font-size:12px;line-height:16px;color:var(--errtxt);white-space:pre-wrap;word-break:break-all}
+.rowerr.show{display:block}
+.rowerr.okc{color:var(--sub)}
+.rowerr + .row::before{content:"";position:absolute;left:var(--inset,var(--pad));right:0;top:0;height:1px;background:var(--sep)}
+.rowerr.in-card{border-top:0}
+.msg{font-size:12px;line-height:16px;color:var(--errtxt);padding:8px var(--pad) 0;white-space:pre-wrap;word-break:break-all}
+.msg.okc{color:var(--sub)}
+.hsel{height:var(--ctl);border-radius:6px;background:var(--btn);border:0;outline:0;padding:0 8px;font:inherit;font-size:13px;color:var(--txt);max-width:240px;color-scheme:light dark}
+.hsel:focus{box-shadow:0 0 0 3px rgba(59,111,212,.20)}
+.val.mono{font-size:12px;max-width:260px}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.btn.ghost{background:transparent;color:var(--sub)}
+.btn.ghost:hover{background:var(--hover)}
+.row.center.arm{font-weight:600}
+</style>
+</head>
+<body>
+<div class="wbody">
+  <aside id="side"></aside>
+  <section class="main">
+    <header class="hdr" id="hdr"></header>
+    <div class="scroll" id="view"></div>
+  </section>
+</div>
+
+<script>
+/* 브라우저 단독 시험용 내장 예시 데이터. window.ipc 가 없을 때만 쓰인다. */
+window.__demo=(function(){
+  const D={
+    hosts:[
+      {name:'this-pc',kind:'local',shell:'powershell',claude:'C:\\Users\\user\\.local\\bin\\claude.exe',workdir:'C:\\Users\\user\\work',host:'',port:'',user:'',identity_file:'',accept_new_host_key:false,claude_permissions:''},
+      {name:'pi',kind:'ssh',shell:'',claude:'',workdir:'',host:'server.example.com',port:'22',user:'user',identity_file:'C:\\Users\\user\\.ssh\\id_ed25519',accept_new_host_key:true,claude_permissions:'accept_edits'},
+      {name:'rocky',kind:'ssh',shell:'',claude:'',workdir:'',host:'192.0.2.20',port:'22',user:'rocky',identity_file:'',accept_new_host_key:false,claude_permissions:''},
+      {name:'relay',kind:'ssh',shell:'',claude:'',workdir:'',host:'relay.example.com',port:'22',user:'user',identity_file:'~/.ssh/id_ed25519_claudy',accept_new_host_key:false,claude_permissions:'',jump:'',desktop:false},
+      {name:'office-pc',kind:'ssh',shell:'powershell',claude:'',workdir:'',host:'127.0.0.1',port:'22022',user:'user',identity_file:'~/.ssh/id_ed25519_claudy',accept_new_host_key:false,claude_permissions:'skip',jump:'relay',desktop:true}
+    ],
+    deny:null, beh:{stealth:true,autostart:true,tunnel:true,tunnelVia:'relay',tunnelPort:22022},
+    defDeny:['(?i)\\brm\\s+-rf\\s+/(\\s|$)','(?i)\\bmkfs','(?i)\\b(shutdown|reboot|poweroff)\\b','(?i)format\\s+[a-z]:','(?i)Remove-Item\\s+.*-Recurse.*\\s[A-Za-z]:\\\\?\\s*$'],
+    logs:[
+      {t:'18:27:04',tool:'run_command',host:'this-pc',code:0,dur:412,cmd:'Get-ChildItem C:\\Users\\user\\work | Select-Object -First 20'},
+      {t:'17:52:31',tool:'claude_ask',host:'pi',code:0,dur:38200,cmd:'claude -p "nginx 오류 로그에서 502 원인을 정리해줘" --permission-mode acceptEdits'},
+      {t:'16:10:45',tool:'job_start',host:'rocky',code:0,dur:200,cmd:'nohup bash ~/backup/run.sh > ~/backup/run.log 2>&1 &'},
+      {t:'14:36:09',tool:'run_command',host:'pi',code:1,dur:2100,cmd:'sudo systemctl restart nginx'},
+      {t:'12:20:58',tool:'run_command',host:'rocky',code:null,dur:null,cmd:'rm -rf /',denied:true},
+      {t:'11:05:12',tool:'run_command',host:'rocky',code:0,dur:900,cmd:'df -h /data'},
+      {t:'09:18:40',tool:'claude_ask',host:'this-pc',code:0,dur:12700,cmd:'claude -p "src 폴더의 TODO 주석을 목록으로 만들어줘" --permission-mode default'}
+    ],
+    jobs:[
+      {id:'0131a7c2e1',host:'rocky',kind:'command',started:'11-06 16:10:02',state:'run',label:'진행',code:null,log:'[16:10:02] 시작  bash ~/backup/run.sh\n[16:10:03] rsync /data  →  /mnt/backup (증분)\n[16:11:40] 1,284개 파일 전송, 3.2 GB\n[16:14:18] 2,906개 파일 전송, 7.8 GB\n[16:16:51] 압축 중 …'},
+      {id:'0130b91f03',host:'pi',kind:'command',started:'11-06 15:02:11',state:'ok',label:'끝남',code:0,log:'[15:02:11] 시작  npm run build\n[15:02:24] 41개 페이지 생성\n[15:02:31] dist/ 3.4 MB\n[15:02:32] 종료 코드 0'},
+      {id:'0128c44d99',host:'this-pc',kind:'claude',started:'11-06 11:40:07',state:'ok',label:'끝남',code:0,log:'[11:40:07] 시작  임시 폴더 정리\n[11:40:09] 218개 항목 삭제\n[11:40:09] 종료 코드 0'},
+      {id:'0127d0a5b7',host:'rocky',kind:'command',started:'11-06 09:31:44',state:'stop',label:'중단',code:130,log:'[09:31:44] 시작  sudo dnf -y update\n[09:31:52] 메타데이터 갱신\n[09:33:05] 사용자가 작업을 중단했습니다\n[09:33:05] 종료 코드 130'}
+    ],
+  };
+  const q=window.location.search;
+  if(q.includes('empty')){D.logs=[];D.jobs=[]}
+  if(q.includes('error')){D.error='TOML 해석 실패: expected `=` at line 3'}
+  const clone=x=>JSON.parse(JSON.stringify(x));
+  function errs(h,others){
+    const e={};
+    if(!h.name.trim())e.name='이름을 적어 주세요.';
+    else if(others.some(o=>o.name===h.name.trim()))e.name='같은 이름의 호스트가 있습니다: '+h.name.trim();
+    if(h.kind==='ssh'){if(!h.host.trim())e.host='호스트 주소를 적어 주세요.';if(!h.user.trim())e.user='사용자 이름을 적어 주세요.'}
+    const p=(h.port||'').trim();
+    if(p&&!(/^\d+$/.test(p)&&+p>=1&&+p<=65535))e.port='포트는 1~65535 사이의 숫자여야 합니다.';
+    return e;
+  }
+  const cmds={
+    'hosts.list':()=>({hosts:clone(D.hosts),error:D.error||null,notes:[],security:{list:(D.deny||D.defDeny).slice(),custom:!!D.deny}}),
+    'hosts.save':a=>{
+      const i=a.original?D.hosts.findIndex(h=>h.name===a.original):-1;
+      const h=i>=0?Object.assign({},D.hosts[i],a.host):Object.assign({name:'',kind:'ssh',shell:'',claude:'',workdir:'',host:'',port:'22',user:'',identity_file:'',accept_new_host_key:false,claude_permissions:''},a.host);
+      const e=errs(h,D.hosts.filter((_,j)=>j!==i));
+      if(Object.keys(e).length)return {saved:false,errors:e};
+      h.name=h.name.trim();if(i>=0)D.hosts[i]=h;else D.hosts.push(h);
+      return {saved:true,name:h.name,hosts:clone(D.hosts)};
+    },
+    'hosts.delete':a=>{
+      if(D.hosts.length<=1)return {saved:false,message:'호스트는 최소 한 개가 있어야 합니다.'};
+      D.hosts=D.hosts.filter(h=>h.name!==a.name);return {saved:true,hosts:clone(D.hosts)};
+    },
+    'host.run_startup':a=>({ok:true,detail:'종료 코드: 0\n결과: 성공\n/home/user/site'}),
+    'host.install_key':a=>a.password==='demo'?{ok:true,key:'~/.ssh/id_ed25519_claudy',hosts:clone(D.hosts)}:(()=>{throw new Error('비밀번호가 맞지 않거나 서버가 비밀번호 접속을 막았습니다.')})(),
+    'host.test':a=>{
+      const bad=(a.name==='rocky');
+      return new Promise(r=>setTimeout(()=>r(bad?{ok:false,text:'실패 · 종료 코드 255',detail:'Permission denied (publickey).'}:{ok:true,text:'연결됨 · 842 ms',detail:'2.1.4 (Claude Code)'}),650));
+    },
+    'host.trust_key':a=>new Promise(r=>setTimeout(()=>r(a.name==='rocky'?{ok:false,detail:'종료 코드: 255\nssh: connect to host 192.0.2.20 port 22: Connection timed out'}:{ok:true,detail:'종료 코드: 0\nWarning: Permanently added \'server.example.com\' (ED25519) to the list of known hosts.'}),500)),
+    'claude.set':a=>{
+      const f={};['claude','workdir'].forEach(k=>{if(k in a)f[k]=a[k]});if('permissions' in a)f.claude_permissions=a.permissions;
+      return cmds['hosts.save']({original:a.name,host:f});
+    },
+    'security.get':()=>({list:(D.deny||D.defDeny).slice(),custom:!!D.deny}),
+    'security.set':a=>{
+      for(let i=0;i<a.list.length;i++){try{new RegExp(a.list[i].replace(/^\(\?i\)/,''))}catch(e){return {saved:false,index:i,message:'정규식이 올바르지 않습니다: '+e.message}}}
+      D.deny=(a.list.length&&JSON.stringify(a.list)!==JSON.stringify(D.defDeny))?a.list.slice():null;
+      return {saved:true,security:cmds['security.get']()};
+    },
+    'security.reset':()=>{D.deny=null;return {saved:true,security:cmds['security.get']()}},
+    'logs.day':a=>{
+      const d=new Date(),t=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      if(a.date!==t||!D.logs.length)return {exists:false,rows:[],total:0,truncated:false};
+      const qq=(a.query||'').trim().toLowerCase();
+      const rows=D.logs.filter(l=>!qq||JSON.stringify(l).toLowerCase().includes(qq));
+      return {exists:true,rows:clone(rows),total:rows.length,truncated:false};
+    },
+    'jobs.list':()=>({rows:D.jobs.map(j=>({id:j.id,host:j.host,kind:j.kind,started:j.started,state:j.state,label:j.label,code:j.code}))}),
+    'jobs.log':a=>({text:(D.jobs.find(j=>j.id===a.id)||{log:''}).log}),
+    'app.info':()=>({version:'0.6.8',dataDir:'C:\\Users\\user\\.claudy',hostsFile:'C:\\Users\\user\\.claudy\\hosts.toml'}),
+    'app.status':()=>({running:!q.includes('off'),hosts:D.hosts.length}),
+    'behavior.get':()=>clone(D.beh),
+    'behavior.set':a=>{Object.assign(D.beh,a);return clone(D.beh)},
+    'automation.status':()=>({windows:!/Mac/.test(navigator.platform||''),hwpGuard:D.beh.hwpGuard!==false,hwpLog:['2026-11-17 13:03:05 접근 허용 창 자동 승인(모두 허용) C:\\work\\a.hwpx'],deskReady:true,deskRuns:12,tunnelLog:['2026-11-17 09:01:31 터널 시작: tun@example.com:22','2026-11-17 09:01:32 ssh 실행']}),
+    'tunnel.status':()=>({state:D.beh.tunnel?'연결됨':'꺼짐',error:'',target:D.beh.tunnel?'tun@example.com:22 → 127.0.0.1:'+(D.beh.tunnelPort||22022):null}),
+    'pick.file':a=>/exe/.test(a.filter||'')?'C:\\Users\\user\\AppData\\Roaming\\npm\\claude.cmd':'C:\\Users\\user\\.ssh\\id_rsa',
+    'pick.folder':()=>'C:\\Users\\user\\projects'
+  };
+  if(q.includes('error')){cmds['hosts.list']=()=>({hosts:[],error:D.error,notes:[],security:null})}
+  return {call:function(cmd,args){
+    return new Promise((res,rej)=>{
+      const f=cmds[cmd];if(!f){rej(new Error('알 수 없는 명령입니다: '+cmd));return}
+      const v=f(args);
+      if(v&&typeof v.then==='function')v.then(res,rej);else setTimeout(()=>res(v),12);
+    });
+  }};
+})();
+</script>
+<script>
+(function(){
+'use strict';
+const MAC=/Mac/.test(navigator.platform||'');if(MAC)document.documentElement.classList.add('mac');
+const LINUX=!MAC&&/Linux/.test(navigator.platform||'');const UNIXLIKE=MAC||LINUX;
+const HAS_IPC=!!(window.ipc&&window.ipc.postMessage);
+const pend=new Map();let seq=0;
+window.__claudy_reply=function(id,res){
+  const p=pend.get(id);if(!p)return;pend.delete(id);
+  if(res&&res.ok)p.res(res.data);else p.rej(new Error((res&&res.error)||'알 수 없는 오류'));
+};
+function call(cmd,args){
+  args=args||{};
+  if(!HAS_IPC)return window.__demo.call(cmd,args);
+  return new Promise((res,rej)=>{const id=++seq;pend.set(id,{res,rej});window.ipc.postMessage(JSON.stringify({id:id,cmd:cmd,args:args}))});
+}
+if(HAS_IPC)document.addEventListener('contextmenu',e=>e.preventDefault());
+
+const P={
+ hosts:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+ claude:'<path d="M5 8l4 4-4 4M12 17h7"/>',
+ ssh:'<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>',
+ auth:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>',
+ security:'<path d="M12 3l8 3v6c0 4.5-3.5 7.5-8 9-4.5-1.5-8-4.5-8-9V6z"/>',
+ logs:'<path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+ jobs:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ behavior:'<path d="M4 7h4M12 7h8M4 17h8M16 17h4"/><circle cx="10" cy="7" r="2"/><circle cx="14" cy="17" r="2"/>',
+ chev:'<path d="M9 6l6 6-6 6"/>', left:'<path d="M15 6l-6 6 6 6"/>',
+ reset:'<path d="M20 12a8 8 0 11-2.6-5.9M20 4v4.5h-4.5"/>', check:'<path d="M5 12.5l5 5L19 7"/>', minus:'<path d="M6 12h12"/>', plus:'<path d="M12 5v14M5 12h14"/>',
+ search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'
+};
+function ic(n,s,w){s=s||16;return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" fill="none" stroke="currentColor" stroke-width="'+(w||1.75)+'" stroke-linecap="round" stroke-linejoin="round">'+P[n]+'</svg>'}
+function appIcon(s){var r=Math.round(s*.26);return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 32 32"><rect width="32" height="32" rx="'+(r*32/s)+'" fill="#3B6FD4"/><path d="M21.5 11.2a7 7 0 100 9.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="22.2" cy="16" r="1.7" fill="#fff"/></svg>'}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const CATS=[
+ ['hosts','호스트','#4A7BD0'],['claude','Claude Code','#7C6FC2'],
+ null,
+ ['ssh','SSH','#3E98A6'],['auth','인증','#C9893F'],['security','보안','#C65D6F'],
+ null,
+ ['logs','실행 기록','#6B7B92'],['jobs','백그라운드 작업','#4E9A68'],['behavior','동작','#8A8D93']
+];
+const TITLES={};CATS.forEach(c=>{if(c)TITLES[c[0]]=c[1]});
+
+const S={
+ tab:'hosts', hosts:[], error:null, notes:[], loaded:false,
+ F:null,                       /* 호스트 상세 편집 상태 */
+ sel:null,                     /* Claude Code, SSH, 인증 화면에서 고른 호스트 이름 */
+ tests:{}, reg:{},
+ sec:{list:[],custom:false}, secAdding:false, secErr:'',
+ beh:{stealth:false,autostart:false}, info:{version:'',dataDir:''}, status:{running:false},
+ logs:{date:today(),q:'',rows:[],exists:false,total:0,truncated:false,sel:0,tok:0},
+ jobs:{rows:[],sel:null,log:''},
+ confirm:null, hostMsg:'',
+};
+function today(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function $(s){return document.querySelector(s)}
+
+/* helpers */
+function row(label,desc,right,cls,attr){
+ return '<div class="row '+(cls||'')+'" '+(attr||'')+'><div class="lbl"><div class="t">'+label+'</div>'+(desc?'<div class="d">'+desc+'</div>':'')+'</div>'+(right?'<div class="rt">'+right+'</div>':'')+'</div>';
+}
+function tg(key,on){return '<button class="tg'+(on?' on':'')+'" data-a="tg" data-k="'+key+'" role="switch" aria-checked="'+!!on+'"></button>'}
+function seg(key,vals,cur){return '<div class="seg">'+vals.map(v=>'<button class="'+(v[1]===cur?'on':'')+'" data-a="seg" data-k="'+key+'" data-v="'+v[1]+'">'+v[0]+'</button>').join('')+'</div>'}
+function grp(title,inner,note){return '<div class="grp">'+(title?'<div class="gt">'+title+'</div>':'')+inner+(note?'<div class="note">'+note+'</div>':'')+'</div>'}
+function card(rows){return '<div class="card">'+rows+'</div>'}
+function btn(cls,label,a,x){return '<button class="btn '+cls+'" data-a="'+a+'" '+(x||'')+'>'+label+'</button>'}
+function errRow(k){return '<div class="rowerr" data-e="'+k+'"></div>'}
+function addRow(label,a,icon,plain){return '<div class="row click add'+(plain?' plain':'')+'" data-a="'+a+'"><span class="ico">'+ic(icon,16)+'</span><div class="lbl"><div class="t">'+label+'</div></div></div>'}
+function emptyBox(t){return '<div class="empty">'+t+'</div>'}
+function fmtDur(ms){if(ms==null)return '-';return ms<1000?ms+' ms':(ms/1000).toFixed(1)+'초'}
+function badge(l){
+  if(l.denied)return '<span class="bd"><i class="dot fail"></i>차단</span>';
+  if(l.code==null)return '<span class="bd"><i class="dot idle"></i>-</span>';
+  return '<span class="bd"><i class="dot '+(l.code===0?'ok':'fail')+'"></i>'+(l.code===0?'성공':'실패')+' '+l.code+'</span>';
+}
+const SHELLS={powershell:'PowerShell',cmd:'cmd',sh:'sh',zsh:'zsh',bash:'bash'};
+function shellOf(h){return h.shell||(MAC?'zsh':LINUX?'bash':'powershell')}
+function target(h){return h.kind==='local'?'이 PC · '+(SHELLS[shellOf(h)]||h.shell):(h.user||'사용자')+'@'+(h.host||'호스트')+':'+(h.port||'22')}
+function hostByName(n){return S.hosts.find(h=>h.name===n)}
+function selHost(sshOnly){
+  const list=sshOnly?S.hosts.filter(h=>h.kind==='ssh'):S.hosts;
+  let h=list.find(x=>x.name===S.sel);
+  if(!h)h=list[0];
+  return {h:h,list:list};
+}
+function hostPicker(list,cur){
+  if(list.length<2)return '';
+  return grp('',card(row('호스트','','<select class="hsel" data-a="sel">'+list.map(x=>'<option value="'+esc(x.name)+'"'+(x.name===cur?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>')));
+}
+function dateLabel(d){return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+'일월화수목금토'[d.getDay()]+'요일'}
+function koDate(s){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?(+m[1])+'년 '+(+m[2])+'월 '+(+m[3])+'일':esc(s||'-')}
+
+/* pages */
+const PAGES={
+ hosts(){
+  if(S.F)return hostDetail();
+  if(S.error)return grp('등록된 호스트',card(emptyBox('hosts.toml 을 읽지 못했습니다')+'<div class="rowerr show" style="padding-bottom:16px;text-align:center">'+esc(S.error)+'</div>'));
+  const rows=S.hosts.map((h,i)=>{
+    const t=S.tests[h.name];const c=t&&t.state==='ok'?'ok':t&&t.state==='fail'?'fail':'idle';
+    return row(esc(h.name),esc(target(h)),'<i class="dot '+c+'"></i><span class="chev">'+ic('chev',16)+'</span>','click','data-a="host" data-i="'+i+'"');
+  }).join('')+addRow('호스트 추가…','addhost','plus');
+  return grp('등록된 호스트',card(rows))+S.notes.map(n=>'<div class="msg">'+esc(n)+'</div>').join('');
+ },
+ claude(){
+  const s=selHost(false),h=s.h;
+  if(!h)return grp('',card(emptyBox('등록된 호스트가 없습니다')));
+  const perm=h.claude_permissions||'skip';
+  const P3=[['skip','전체 허용','모든 도구를 확인 없이 실행합니다'],['accept_edits','파일 편집만 자동 허용','파일 편집은 자동, 명령 실행은 확인합니다'],['default','모두 확인','모든 도구 실행 전에 확인합니다']];
+  const exe=h.claude||'claude',wd=h.workdir,ssh=h.kind==='ssh';
+  const inp=(k,v,ph)=>'<input class="in" data-cf="'+k+'" style="font-family:var(--mono);font-size:12px;width:280px" value="'+esc(v)+'" placeholder="'+esc(ph)+'" spellcheck="false" autocomplete="off">';
+  return hostPicker(s.list,h.name)+
+   grp('',card(
+    row('실행 파일','',ssh?inp('claude',h.claude||'','claude'):'<span class="val mono" title="'+esc(exe)+'">'+esc(exe)+'</span>'+(h.claude&&h.claude!=='claude'?btn('ghost','기본값','clexe'):'')+btn('sec','변경…','pickexe'))+
+    row('작업 폴더','',ssh?inp('workdir',wd||'','원격 사용자 홈'):'<span class="val mono" title="'+esc(wd||'')+'">'+(wd?esc(wd):'<span style="font-family:var(--font);font-size:13px">사용자 홈 (기본)</span>')+'</span>'+(wd?btn('ghost','기본값','clwd'):'')+btn('sec','변경…','pickwd'))))+
+   grp('권한',card(P3.map(p=>row(p[1],p[2],perm===p[0]?'<span style="color:var(--acc)">'+ic('check',16,MAC?2.75:2)+'</span>':'','click','data-a="perm" data-v="'+p[0]+'"')).join('')));
+ },
+ ssh(){
+  const s=selHost(true),h=s.h;
+  if(!h)return grp('',card(emptyBox('SSH 호스트가 없습니다')));
+  const st=S.reg[h.name]||{};
+  const label=st.state==='run'?'등록 중…':st.state==='ok'?'등록됨':'등록';
+  return hostPicker(s.list,h.name)+
+   grp('',card(row('처음 접속하는 서버의 호스트 키 자동 등록','',tg('autoKey',h.accept_new_host_key))+
+    row('호스트 키 지금 등록','선택한 호스트의 키를 known_hosts 에 추가합니다',btn('pri',label,'reg',st.state==='run'?'disabled':'')))+
+    (st.text?'<div class="msg'+(st.state==='ok'?' okc':'')+'" id="regmsg">'+esc(st.text)+'</div>':'<div id="regmsg"></div>'));
+ },
+ auth(){
+  const s=selHost(true),h=s.h;
+  if(!h)return grp('',card(emptyBox('SSH 호스트가 없습니다')));
+  return hostPicker(s.list,h.name)+
+   grp('',card(row('개인 키 파일',h.identity_file?'<span class="mono" style="font-size:12px">'+esc(h.identity_file)+'</span>':'기본 SSH 키를 사용합니다',(h.identity_file?btn('ghost','기본값','clkey'):'')+btn('sec','선택…','pickkey'))),'비밀번호 인증은 지원하지 않습니다');
+ },
+ security(){
+  const L=S.sec.list;
+  const rows=L.map((r,i)=>'<div class="row"><div class="rx" title="'+esc(r)+'">'+esc(r)+'</div><button class="minus" data-a="rxdel" data-i="'+i+'" aria-label="삭제">'+ic('minus',12,2.25)+'</button></div>').join('')+
+   (S.secAdding?'<div class="row"><input class="in mono" id="rxnew" placeholder="정규식을 입력하고 Enter" spellcheck="false" autocomplete="off"></div><div class="rowerr'+(S.secErr?' show':'')+'" id="rxerr">'+esc(S.secErr)+'</div>':'');
+  return grp('차단 명령 (정규식)',card(rows||emptyBox('차단 명령이 없습니다')),S.sec.custom?'':'기본 목록을 쓰는 중입니다. 항목을 고치면 사용자 목록으로 바뀝니다')+
+   grp('',card(addRow('추가…','rxadd','plus')+addRow('기본값으로 되돌리기','rxreset','reset',true)));
+ },
+ logs(){
+  const L=S.logs;
+  return '<div class="bar"><div class="datenav"><button class="ib" data-a="dprev" aria-label="이전 날">'+ic('left',16)+'</button><span>'+dateLabel(L.date)+'</span><button class="ib" data-a="dnext" '+(ymd(L.date)>=ymd(today())?'disabled':'')+' aria-label="다음 날">'+ic('chev',16)+'</button></div>'+
+   '<div class="srch">'+ic('search',16)+'<input class="in" id="q" placeholder="검색" value="'+esc(L.q)+'" spellcheck="false" autocomplete="off"></div></div>'+
+   '<div class="grp"><div class="card tbl"><div class="thead"><span>시각</span><span>도구</span><span>호스트</span><span>결과</span><span class="dur">소요</span></div><div id="logbody">'+logBody()+'</div></div>'+(L.truncated?'<div class="note">최근 '+L.rows.length+'건만 표시합니다 (전체 '+L.total+'건)</div>':'')+'</div>'+
+   '<div id="logdetail">'+logDetail()+'</div>';
+ },
+ jobs(){
+  const J=S.jobs;
+  if(!J.rows.length)return grp('작업 목록',card(emptyBox('백그라운드 작업이 없습니다')));
+  const rows=J.rows.map(j=>'<div class="row click'+(J.sel===j.id?' sel':'')+'" data-a="job" data-id="'+esc(j.id)+'"><div class="jrow" style="flex:1"><span class="no" title="'+esc(j.id)+'">'+esc(j.id.slice(0,8))+'</span><span class="sub">'+esc(j.host)+'</span><span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(j.kind)+' <span class="sub">· '+esc(j.started)+'</span></span><span class="bd"><i class="dot '+(j.state==='ok'?'ok':j.state==='run'?'run':'fail')+'"></i>'+jobText(j)+'</span></div></div>').join('');
+  return grp('작업 목록',card(rows))+(J.sel?grp('작업 '+esc(J.sel.slice(0,8))+' 로그',card('<div class="logbox" id="joblog">'+esc(J.log)+'</div>')):'');
+ },
+ behavior(){
+  return (MAC?grp('',card(row('잠수함 모드','Dock과 앱 전환기에서 숨기고 메뉴 막대 아이콘만 남깁니다',tg('stealth',S.beh.stealth))+row('로그인 시 실행','메뉴 막대에서 조용히 시작합니다',tg('autostart',S.beh.autostart))),'창을 닫아도 메뉴 막대에 남습니다. 종료는 메뉴 막대 아이콘에서 합니다')
+   :grp('',card(row('잠수함 모드','작업 표시줄에서 숨기고 알림 영역 아이콘만 남깁니다',tg('stealth',S.beh.stealth))+row(LINUX?'로그인 시 실행':'Windows 시작 시 실행','알림 영역에서 조용히 시작합니다',tg('autostart',S.beh.autostart))),LINUX?'창을 닫아도 알림 영역에 남습니다. 종료는 알림 영역 아이콘 메뉴에서 합니다':'창을 닫아도 알림 영역에 남습니다. 종료는 알림 영역 아이콘의 오른쪽 단추 메뉴에서 합니다'))+
+   tunnelCard()+
+   autoCard()+
+   grp('',card('<div class="row"><div class="lbl"><div class="t" style="color:var(--sub)">버전 '+esc(S.info.version)+'</div>'+(S.info.dataDir?'<div class="d mono" title="'+esc(S.info.dataDir)+'">'+esc(S.info.dataDir)+'</div>':'')+'</div></div>'));
+ }
+};
+function tunnelCard(){
+  const b=S.beh,T=S.tun||{};
+  const opts=S.hosts.filter(x=>x.kind==='ssh'&&!x.jump).map(x=>'<option value="'+esc(x.name)+'"'+(x.name===b.tunnelVia?' selected':'')+'>'+esc(x.name)+'</option>').join('');
+  const st=b.tunnel?'<span class="bd"><i class="dot '+(/^연결됨/.test(T.state||'')?'ok':/대기|확인/.test(T.state||'')?'fail':'run')+'"></i>'+esc(T.state||'확인 중')+'</span>':'<span class="sub">꺼짐</span>';
+  return grp('역방향 터널',card(row('터널 켜기','이 PC 의 SSH 를 서버에 열어 둡니다',tg('tunnel',!!b.tunnel))+
+    row('터널 서버','','<select class="in" data-tv="tunnelVia" style="width:170px"><option value="">고르세요</option>'+opts+'</select>')+
+    row('서버 쪽 포트','다른 PC 는 서버의 127.0.0.1:이 포트로 접속합니다','<input class="in" data-tv="tunnelPort" style="width:80px" value="'+esc(String(b.tunnelPort||22022))+'" spellcheck="false" autocomplete="off">')+
+    row('상태','',st)+
+    (b.tunnel&&S.auto&&(S.auto.tunnelLog||[]).length?'<div class="row startup"><div class="logbox">'+esc(S.auto.tunnelLog.slice().reverse().join('\n'))+'</div></div>':'')),
+    (S.tunErr?'<span style="color:var(--del)">'+esc(S.tunErr)+'</span>':T.error&&b.tunnel?'<span style="color:var(--del)">'+esc(T.error)+'</span>':'회사처럼 밖에서 들어올 수 없는 PC 에서 켭니다. 끊기면 15초 뒤 다시 잇습니다'));
+}
+async function loadTunnel(){try{S.tun=await call('tunnel.status');S.auto=await call('automation.status');if(S.tab==='behavior')render(true)}catch(e){}}
+function autoCard(){
+  const A=S.auto;if(!A||!A.windows)return '';
+  const desk=A.deskReady?'<span class="bd"><i class="dot ok"></i>대기 중'+(A.deskRuns?' · '+A.deskRuns+'건 처리':'')+'</span>':'<span class="bd"><i class="dot fail"></i>꺼짐</span>';
+  const log=(A.hwpLog||[]).slice().reverse().join('\n')||'자동 승인한 기록이 없습니다';
+  return grp('한글 자동화',card(row('「접근 허용」 창 자동 승인','한글이 띄운 보안 확인 창에만 「모두 허용」을 누릅니다',tg('hwpGuard',A.hwpGuard))+
+    row('원격 명령 화면 실행','다른 PC 의 Claudy 명령을 이 PC 화면 세션에서 바로 실행합니다',desk)),'기록은 사용자 폴더의 .claudy\\hwpguard.log 에 남습니다')+
+    grp('자동 승인 기록',card('<div class="logbox">'+esc(log)+'</div>'));
+}
+function jobText(j){
+  if(j.state==='run')return '진행 중';
+  if(j.state==='ok')return '완료';
+  if(j.state==='stop')return '중단';
+  return '실패'+(j.code!=null?' '+j.code:'');
+}
+function logBody(){
+  const L=S.logs;
+  if(!L.exists||(L.total===0&&!L.q.trim()))return emptyBox('이 날짜의 기록이 없습니다');
+  if(!L.rows.length)return emptyBox('검색 결과가 없습니다');
+  return L.rows.map((l,i)=>'<div class="trow click'+(L.sel===i?' sel':'')+'" data-a="log" data-i="'+i+'"><span class="tm">'+esc(l.t.slice(0,5))+'</span><span class="tool">'+esc(l.tool)+'</span><span>'+esc(l.host)+'</span>'+badge(l)+'<span class="dur">'+fmtDur(l.dur)+'</span></div>').join('');
+}
+function logDetail(){
+  const L=S.logs,l=L.rows[L.sel];
+  if(!l)return '';
+  return '<div class="grp"><div class="gt">명령</div><div class="card detail"><div class="cmd">'+esc(l.cmd)+'</div><div class="meta">'+badge(l)+'<span>· '+esc(l.host)+' · '+esc(l.tool)+' · '+fmtDur(l.dur)+'</span></div></div></div>';
+}
+function hostDetail(){
+  const F=S.F,f=F.f;
+  let out=grp('',card(row('이름','','<input class="in" data-f="name" value="'+esc(f.name)+'" spellcheck="false" autocomplete="off">')+errRow('name')+row('연결 종류','',seg('kind',[['이 PC','local'],['SSH','ssh']],f.kind))));
+  if(f.kind==='ssh'){
+    out+=grp('SSH',card(row('호스트','','<input class="in" data-f="host" placeholder="example.com" value="'+esc(f.host)+'" spellcheck="false" autocomplete="off">')+errRow('host')+
+      row('포트','','<input class="in" data-f="port" style="width:80px" value="'+esc(f.port)+'" spellcheck="false" autocomplete="off">')+errRow('port')+
+      row('사용자','','<input class="in" data-f="user" placeholder="사용자 이름" value="'+esc(f.user)+'" spellcheck="false" autocomplete="off">')+errRow('user')+
+      row('원격 운영체제','',seg('shell',[['Linux·macOS',''],['Windows','powershell']],f.shell==='powershell'?'powershell':''))+errRow('shell')+
+      row('경유 호스트','바로 닿지 않을 때 먼저 거쳐 갈 서버','<select class="in" data-f="jump" style="width:170px"><option value="">없음(바로 접속)</option>'+S.hosts.filter(x=>x.kind==='ssh'&&x.name!==F.orig&&!x.jump).map(x=>'<option value="'+esc(x.name)+'"'+(x.name===f.jump?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>')+errRow('jump')),
+      F.isNew?'호스트 주소와 사용자 이름을 적으면 저장됩니다':'');
+  }else{
+    const sh=MAC?[['zsh','zsh'],['bash','bash'],['sh','sh']]:LINUX?[['bash','bash'],['zsh','zsh'],['sh','sh']]:[['PowerShell','powershell'],['cmd','cmd']];if(!UNIXLIKE&&shellOf(f)==='sh')sh.push(['sh','sh']);
+    out+=grp('셸',card(row('사용할 셸','',seg('shell',sh,shellOf(f)))+errRow('shell')),F.isNew?'이름을 적으면 저장됩니다':'');
+  }
+  const t=S.tests[F.orig||'\u0000new'];
+  out+='<div class="grp">'+card(row('연결 시험','','<span class="ok-msg" id="testmsg">'+testMsg(t)+'</span>'+btn('sec','시험','test',t&&t.state==='run'?'disabled':'')))+
+    '<div class="msg'+(t&&t.state==='ok'?' okc':'')+'" id="testnote" style="'+(t&&t.detail?'':'display:none')+'">'+(t?esc(t.detail||''):'')+'</div></div>';
+  if(f.kind==='ssh'){
+    const k=S.keyInst||{};
+    out+=grp('처음 접속',card(row('비밀번호로 키 등록','서버 비밀번호를 한 번만 입력합니다','<input class="in pw" id="kpw" type="password" placeholder="서버 비밀번호" autocomplete="off" style="width:150px">'+btn('sec',k.state==='run'?'등록 중…':'등록','instkey',k.state==='run'?'disabled':''))),
+      k.msg?'<span style="color:'+(k.state==='ok'?'var(--ok)':'var(--del)')+'">'+esc(k.msg)+'</span>':'비밀번호는 저장하지 않고 이번 등록에만 씁니다');
+    const hh=S.hosts.find(x=>x.name===F.orig)||{};
+    if(f.shell==='powershell')out+=grp('',card(row('화면 세션에서 실행','로그온한 사용자 화면에서 명령을 실행합니다',tg('desktop',!!hh.desktop))),'한글처럼 창이 있는 프로그램을 자동화할 때 켭니다. 그 PC 에 사용자가 로그온해 있어야 합니다');
+    else out+=grp('',card(row('root 권한으로 실행','접속한 계정에서 sudo 로 root 가 됩니다',tg('asRoot',!!hh.run_as_root))),'접속 계정에 비밀번호 없는 sudo 가 설정되어 있어야 합니다. root 로 실행하면 Claude Code 는 전체 허용을 쓸 수 없습니다');
+    const su=S.startRun||{};
+    out+=grp('접속 후 명령',card('<div class="row startup"><textarea class="ta mono" data-f="startup" rows="4" placeholder="한 줄에 명령 하나씩 적습니다&#10;예 cd ~/site&#10;source ~/.profile" spellcheck="false" autocomplete="off">'+esc(f.startup||'')+'</textarea>'+btn('sec',su.state==='run'?'실행 중…':'실행','runstart',su.state==='run'?'disabled':'')+'</div>'),
+      '접속할 때마다 채팅 명령보다 먼저 위에서부터 차례로 실행합니다. 중간에 실패하면 본 명령은 실행하지 않습니다')+
+      (su.detail?'<div class="msg'+(su.state==='ok'?' okc':'')+'" style="white-space:pre-wrap;margin-top:-12px;margin-bottom:24px">'+esc(su.detail)+'</div>':'');
+  }
+  const arm=S.confirm&&S.confirm.key==='host';
+  out+='<div class="card"><div class="row click center'+(arm?' arm':'')+'" data-a="delhost">'+(arm?'한 번 더 누르면 삭제됩니다':'호스트 삭제…')+'</div></div>'+
+       '<div class="msg" id="hostmsg" style="'+(S.hostMsg?'':'display:none')+'">'+esc(S.hostMsg)+'</div>';
+  return out;
+}
+function testMsg(t){
+  if(!t)return '';
+  if(t.state==='run')return '연결 중…';
+  return '<i class="dot '+(t.state==='ok'?'ok':'fail')+'"></i>'+esc(t.text);
+}
+
+/* render */
+function renderSide(){
+  const n=S.hosts.length;
+  let h='<div class="prog">'+appIcon(32)+'<div><div class="n">Claudy</div><div class="s" id="sstat">'+statText()+'</div></div></div>';
+  let open=false;
+  CATS.forEach(c=>{
+    if(c===null){h+='</div>';open=false;return}
+    if(!open){h+='<div class="sg">';open=true}
+    h+='<button class="si'+(S.tab===c[0]?' on':'')+'" data-a="tab" data-t="'+c[0]+'"><span class="ib20" style="background:'+c[2]+'">'+ic(c[0],12)+'</span><span class="nm">'+c[1]+'</span></button>';
+  });
+  if(open)h+='</div>';
+  $('#side').innerHTML=h;
+}
+function statText(){
+  const r=S.status.running;
+  return '<i class="dot '+(r?'ok':'idle')+'"></i><span>'+(r?'실행 중':'꺼짐')+' · '+S.hosts.length+'개 호스트</span>';
+}
+function renderHdr(){
+  const sub=S.tab==='hosts'&&S.F;
+  $('#hdr').className='hdr'+(sub?' sub':'');
+  $('#hdr').innerHTML=(sub?'<button class="back" data-a="back" aria-label="호스트 목록으로">'+ic('left',16,2)+'<span>호스트</span></button><h1>'+esc(S.F.f.name||'새 호스트')+'</h1>':'<h1>'+TITLES[S.tab]+'</h1>')+
+   '<span class="saved" id="saved">'+ic('check',12,2)+'변경 사항이 저장되었습니다</span>';
+}
+function render(keepScroll){
+  const sc=$('#view');const top=keepScroll?sc.scrollTop:0;
+  renderSide();renderHdr();sc.innerHTML=PAGES[S.tab]();sc.scrollTop=top;
+  if(S.F)paintErrors();
+  if(S.secAdding&&S.tab==='security'){const n=$('#rxnew');if(n)n.focus()}
+}
+let ft;function flash(){const e=$('#saved');if(!e)return;e.classList.add('show');clearTimeout(ft);ft=setTimeout(()=>e.classList.remove('show'),1700)}
+function paintErrors(){
+  if(!S.F)return;
+  document.querySelectorAll('[data-e]').forEach(el=>{
+    const k=el.dataset.e,m=S.F.touched[k]&&S.F.errors[k];
+    el.textContent=m||'';el.classList.toggle('show',!!m);
+  });
+}
+function status(){return call('app.status').then(s=>{S.status=s;const e=$('#sstat');if(e)e.innerHTML=statText()}).catch(()=>{})}
+
+/* 호스트 저장 */
+let saveT=0,saveChain=Promise.resolve();
+function scheduleSave(ms){clearTimeout(saveT);saveT=setTimeout(()=>{saveT=0;doSave()},ms)}
+function doSave(){
+  clearTimeout(saveT);saveT=0;
+  const F=S.F;if(!F)return saveChain;
+  const snap=Object.assign({},F.f),orig=F.orig;
+  saveChain=saveChain.then(()=>call('hosts.save',{host:snap,original:orig})).then(r=>{
+    if(S.F!==F)return;
+    if(r.saved){
+      F.orig=r.name;F.isNew=false;F.errors={};S.hosts=r.hosts;
+      if(S.sel===orig)S.sel=r.name;
+      renderSide();paintErrors();flash();
+      document.querySelectorAll('.grp > .note').forEach(n=>{if(/적으면 저장됩니다/.test(n.textContent))n.remove()});
+    }else{F.errors=r.errors||{};paintErrors()}
+  }).catch(e=>{if(S.F===F){F.errors={name:e.message};F.touched.name=true;paintErrors()}});
+  return saveChain;
+}
+function newForm(h,isNew){
+  return {isNew:isNew,orig:isNew?'':h.name,touched:{},errors:{},f:{name:h.name,kind:h.kind,shell:h.shell||'',host:h.host||'',port:h.port||'',user:h.user||'',startup:h.startup||'',jump:h.jump||''}};
+}
+async function leaveDetail(){
+  if(saveT)await doSave();else await saveChain;
+  S.F=null;S.hostMsg='';S.confirm=null;
+}
+/* 데이터 읽기 */
+async function loadHosts(reload){
+  const r=await call('hosts.list',{reload:!!reload});
+  const same=JSON.stringify(r.hosts)===JSON.stringify(S.hosts)&&r.error===S.error;
+  S.hosts=r.hosts;S.error=r.error||null;S.notes=r.notes||[];
+  if(r.security){S.sec=r.security}
+  return !same;
+}
+async function loadLogs(){
+  const L=S.logs,tok=++L.tok;
+  const r=await call('logs.day',{date:ymd(L.date),query:L.q});
+  if(tok!==L.tok)return;
+  L.rows=r.rows;L.exists=r.exists;L.total=r.total;L.truncated=r.truncated;
+  if(L.sel>=L.rows.length)L.sel=0;
+  if(S.tab==='logs'){const b=$('#logbody');if(b){b.innerHTML=logBody();$('#logdetail').innerHTML=logDetail();const g=b.parentNode.parentNode;const n=g.querySelector('.note');if(r.truncated){if(!n)g.insertAdjacentHTML('beforeend','<div class="note">최근 '+r.rows.length+'건만 표시합니다 (전체 '+r.total+'건)</div>')}else if(n)n.remove()}}
+}
+async function loadJobs(keep){
+  const r=await call('jobs.list');
+  const J=S.jobs;
+  const changed=JSON.stringify(r.rows)!==JSON.stringify(J.rows);
+  J.rows=r.rows;
+  if(!J.sel||!J.rows.find(j=>j.id===J.sel))J.sel=J.rows.length?J.rows[0].id:null;
+  let log=J.log;
+  if(J.sel)log=(await call('jobs.log',{id:J.sel})).text;else log='';
+  const logChanged=log!==J.log;J.log=log;
+  if(S.tab==='jobs'){
+    if(changed||!keep)render(true);
+    else if(logChanged){const e=$('#joblog');if(e)e.textContent=log}
+  }
+}
+async function enter(tab){
+  if(S.F)await leaveDetail();
+  S.tab=tab;S.confirm=null;S.secAdding=false;S.secErr='';
+  if(tab==='logs')S.logs.date=S.logs.date||today();
+  render();
+  try{
+    if(tab==='logs')await loadLogs();
+    else if(tab==='jobs')await loadJobs(false);
+    else if(tab==='security'){const g=await call('security.get');S.sec=g;if(S.tab==='security')render(true)}
+    else if(tab==='behavior'){S.beh=await call('behavior.get');await loadTunnel();if(S.tab==='behavior')render(true)}
+  }catch(e){}
+}
+function arm(key){
+  S.confirm={key:key};clearTimeout(arm.t);
+  arm.t=setTimeout(()=>{if(S.confirm&&S.confirm.key===key){S.confirm=null;render(true)}},3000);
+}
+
+/* 파일 고르기 */
+async function pick(kind,title,filter){
+  try{return await call(kind,{title:title,filter:filter||''})}catch(e){return null}
+}
+
+/* events */
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-a]');if(!el)return;
+  const a=el.dataset.a,i=+el.dataset.i;
+  try{switch(a){
+   case 'tab':if(S.tab===el.dataset.t&&!S.F)break;await enter(el.dataset.t);break;
+   case 'host':S.F=newForm(S.hosts[i],false);S.confirm=null;S.hostMsg='';S.keyInst=null;S.startRun=null;render();break;
+   case 'back':await leaveDetail();render();break;
+   case 'addhost':S.F=newForm({name:'새 호스트',kind:'ssh',shell:'',host:'',port:'22',user:''},true);render();break;
+   case 'seg':{
+     const F=S.F;F.f[el.dataset.k]=el.dataset.v;F.touched[el.dataset.k]=true;
+     if(el.dataset.k==='kind'&&el.dataset.v==='ssh'&&!F.f.port)F.f.port='22';
+     delete S.tests[F.orig||'\u0000new'];render(true);await doSave();break}
+   case 'delhost':{
+     const F=S.F;
+     if(!(S.confirm&&S.confirm.key==='host')){arm('host');render(true);break}
+     S.confirm=null;
+     if(F.isNew){S.F=null;render();break}
+     const r=await call('hosts.delete',{name:F.orig});
+     if(r.saved){S.hosts=r.hosts;S.F=null;S.hostMsg='';render();flash()}
+     else{S.hostMsg=r.message||'삭제하지 못했습니다';render(true)}
+     break}
+   case 'test':{
+     const F=S.F,key=F.orig||'\u0000new';
+     if(saveT)await doSave();
+     S.tests[key]={state:'run'};
+     $('#testmsg').innerHTML='연결 중…';el.disabled=true;
+     const args=F.isNew?{host:F.f}:{name:F.orig};
+     let r;try{r=await call('host.test',args)}catch(err){r={ok:false,text:'실패',detail:err.message}}
+     S.tests[key]={state:r.ok?'ok':'fail',text:r.text,detail:r.detail};
+     if(S.F===F&&S.tab==='hosts'){
+       const m=$('#testmsg');if(m)m.innerHTML=testMsg(S.tests[key]);
+       const b=$('[data-a="test"]');if(b)b.disabled=false;
+       const n=$('#testnote');if(n){n.textContent=r.detail||'';n.style.display=r.detail?'':'none';n.classList.toggle('okc',r.ok)}
+     }
+     break}
+   case 'instkey':{
+     const F=S.F;const pw=($('#kpw')||{}).value||'';
+     if(!pw){S.keyInst={state:'fail',msg:'비밀번호를 입력해 주세요'};render(true);break}
+     await doSave();
+     if(F.isNew||!F.f.host||!F.f.user){S.keyInst={state:'fail',msg:'호스트 주소와 사용자 이름을 먼저 적어 주세요'};render(true);break}
+     S.keyInst={state:'run'};render(true);
+     let r;try{r=await call('host.install_key',{name:F.orig,password:pw})}catch(err){r={ok:false,error:err.message}}
+     if(r&&r.ok){S.hosts=r.hosts||S.hosts;S.keyInst={state:'ok',msg:'키를 등록했습니다. 이제 비밀번호 없이 연결됩니다'};render(true);const b=$('[data-a="test"]');if(b)b.click()}
+     else{S.keyInst={state:'fail',msg:(r&&(r.error||r.detail))||'등록하지 못했습니다'};render(true)}
+     break}
+   case 'runstart':{
+     const F=S.F;await doSave();
+     if(F.isNew){S.startRun={state:'fail',detail:'호스트 주소와 사용자 이름을 먼저 적어 주세요'};render(true);break}
+     S.startRun={state:'run'};render(true);
+     let r;try{r=await call('host.run_startup',{name:F.orig})}catch(err){r={ok:false,detail:err.message}}
+     S.startRun={state:r.ok?'ok':'fail',detail:r.detail||''};render(true);
+     break}
+   case 'perm':{const s=selHost(false);if(!s.h)break;const r=await call('claude.set',{name:s.h.name,permissions:el.dataset.v});if(r.saved){S.hosts=r.hosts;render(true);flash()}break}
+   case 'clexe':{const s=selHost(false);const r=await call('claude.set',{name:s.h.name,claude:''});if(r.saved){S.hosts=r.hosts;render(true);flash()}break}
+   case 'clwd':{const s=selHost(false);const r=await call('claude.set',{name:s.h.name,workdir:''});if(r.saved){S.hosts=r.hosts;render(true);flash()}break}
+   case 'pickexe':{const s=selHost(false);const p=await pick('pick.file','Claude Code 실행 파일 선택',UNIXLIKE?'':'exe');if(p){const r=await call('claude.set',{name:s.h.name,claude:p});if(r.saved){S.hosts=r.hosts;render(true);flash()}}break}
+   case 'pickwd':{const s=selHost(false);const p=await pick('pick.folder','작업 폴더 선택');if(p){const r=await call('claude.set',{name:s.h.name,workdir:p});if(r.saved){S.hosts=r.hosts;render(true);flash()}}break}
+   case 'pickkey':{const s=selHost(true);const p=await pick('pick.file','개인 키 파일 선택','');if(p){const r=await call('hosts.save',{original:s.h.name,host:{identity_file:p}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}break}
+   case 'clkey':{const s=selHost(true);const r=await call('hosts.save',{original:s.h.name,host:{identity_file:''}});if(r.saved){S.hosts=r.hosts;render(true);flash()}break}
+   case 'tg':{
+     const k=el.dataset.k;
+     if(k==='asRoot'){const F=S.F;await doSave();const hh=S.hosts.find(x=>x.name===F.orig);if(!hh)break;const r=await call('hosts.save',{original:hh.name,host:{run_as_root:!hh.run_as_root}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
+     else if(k==='desktop'){const F=S.F;await doSave();const hh=S.hosts.find(x=>x.name===F.orig);if(!hh)break;const r=await call('hosts.save',{original:hh.name,host:{desktop:!hh.desktop}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
+     else if(k==='tunnel'){const v=!S.beh.tunnel;try{S.beh=await call('behavior.set',{tunnel:v})}catch(err){S.tunErr=err.message}render(true);flash();setTimeout(loadTunnel,1500);setTimeout(loadTunnel,7000)}
+     else if(k==='autoKey'){const s=selHost(true);if(!s.h)break;const r=await call('hosts.save',{original:s.h.name,host:{accept_new_host_key:!s.h.accept_new_host_key}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
+     else if(k==='hwpGuard'){const v=!(S.auto&&S.auto.hwpGuard);S.auto.hwpGuard=v;render(true);S.beh=await call('behavior.set',{hwpGuard:v});await loadTunnel();flash()}
+     else{const v=!S.beh[k];S.beh[k]=v;render(true);const o={};o[k]=v;S.beh=await call('behavior.set',o);render(true);flash()}
+     break}
+   case 'reg':{
+     const s=selHost(true),h=s.h;if(!h)break;
+     S.reg[h.name]={state:'run'};render(true);
+     let r;try{r=await call('host.trust_key',{name:h.name})}catch(err){r={ok:false,detail:err.message}}
+     S.reg[h.name]={state:r.ok?'ok':'fail',text:r.detail};
+     if(S.tab==='ssh')render(true);
+     break}
+   case 'rxdel':{const L=S.sec.list.slice();L.splice(i,1);await secSave(L);break}
+   case 'rxadd':S.secAdding=true;S.secErr='';render(true);break;
+   case 'rxreset':{S.secAdding=false;S.secErr='';const r=await call('security.reset');S.sec=r.security;render(true);flash();break}
+   case 'dprev':{const d=S.logs.date;S.logs.date=new Date(d.getFullYear(),d.getMonth(),d.getDate()-1);S.logs.sel=0;render();await loadLogs();break}
+   case 'dnext':{if(ymd(S.logs.date)<ymd(today())){const d=S.logs.date;S.logs.date=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);S.logs.sel=0;render();await loadLogs()}break}
+   case 'log':S.logs.sel=i;$('#logbody').innerHTML=logBody();$('#logdetail').innerHTML=logDetail();break;
+   case 'job':{S.jobs.sel=el.dataset.id;S.jobs.log=(await call('jobs.log',{id:S.jobs.sel})).text;render(true);break}
+  }}catch(err){console.error(err)}
+});
+async function secSave(list){
+  const r=await call('security.set',{list:list});
+  if(r.saved){S.sec=r.security;S.secErr='';S.secAdding=false;render(true);flash();return true}
+  S.secErr=r.message||'저장하지 못했습니다';
+  const e=$('#rxerr');if(e){e.textContent=S.secErr;e.classList.add('show')}else render(true);
+  return false;
+}
+document.addEventListener('change',async e=>{
+  const t=e.target;
+  if(t.dataset&&t.dataset.a==='sel'){S.sel=t.value;render(true)}
+  else if(t.dataset&&t.dataset.tv){
+    const o={};o[t.dataset.tv]=t.value.trim();S.tunErr='';
+    try{S.beh=await call('behavior.set',o);flash()}catch(err){S.tunErr=err.message}
+    render(true);setTimeout(loadTunnel,1500);setTimeout(loadTunnel,7000);
+  }
+  else if(t.dataset&&t.dataset.cf){
+    const s=selHost(false);if(!s.h)return;
+    const f={};f[t.dataset.cf]=t.value.trim();
+    const r=await call('claude.set',Object.assign({name:s.h.name},f));
+    if(r.saved){S.hosts=r.hosts;flash()}
+  }
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset&&t.dataset.f&&S.F){
+    const k=t.dataset.f;S.F.f[k]=t.value;S.F.touched[k]=true;
+    if(k==='name'){const h=$('#hdr h1');if(h)h.textContent=t.value||'새 호스트'}
+    delete S.tests[S.F.orig||'\u0000new'];
+    scheduleSave(450);
+  }else if(t.id==='q'){S.logs.q=t.value;clearTimeout(loadLogs.t);loadLogs.t=setTimeout(loadLogs,160)}
+});
+document.addEventListener('focusout',e=>{
+  const t=e.target;
+  if(t.dataset&&t.dataset.f&&S.F){S.F.touched[t.dataset.f]=true;paintErrors()}
+  if(t.id==='rxnew'&&S.secAdding){setTimeout(()=>{if(S.secAdding&&!document.activeElement.matches('#rxnew')){S.secAdding=false;S.secErr='';render(true)}},120)}
+});
+document.addEventListener('keydown',async e=>{
+  if(e.target.id==='rxnew'){
+    if(e.key==='Enter'){
+      const v=e.target.value.trim();
+      if(!v){S.secAdding=false;S.secErr='';render(true);return}
+      const L=S.sec.list.slice();L.push(v);
+      await secSave(L);
+    }else if(e.key==='Escape'){S.secAdding=false;S.secErr='';render(true)}
+  }
+});
+window.addEventListener('focus',async()=>{
+  if(S.F&&S.F.isNew)return;
+  try{const ch=await loadHosts(true);if(ch&&!saveT&&!S.F)render(true);status()}catch(e){}
+});
+
+/* 시작 */
+(async function init(){
+  try{
+    const [,info,beh]=await Promise.all([loadHosts(false),call('app.info'),call('behavior.get')]);
+    S.info=info;S.beh=beh;
+    await status();
+  }catch(e){S.error=String(e.message||e)}
+  S.loaded=true;render();
+  setInterval(()=>{status();if(S.tab==='jobs')loadJobs(true).catch(()=>{})},4000);
+})();
+window.__claudy={S:S,render:render,go:t=>enter(t)};
+})();
+</script>
+</body>
+</html>
