@@ -28,6 +28,9 @@ claude_ask 는 호출마다 Claude Code 를 새로 띄워 수십 초와 별도 �
 로그인은 사용자 브라우저의 비밀번호 관리 확장 프로그램에 맡긴다. 아이디·비밀번호를 채팅에서 묻거나 받거나 스크립트에 넣지 않는다. \
 호스트 사이 파일 복사는 file_copy 를 쓴다(scp 를 직접 짜지 않는다). Windows 호스트의 Claudy 갱신은 claudy_update 를 쓴다. \
 창이 있는 프로그램은 app_open 으로 띄운다(원격 호스트에서 run_command 로 띄운 창은 화면에 보이지 않는다). \
+Windows 에서 개발·시험용으로 띄우는 프로그램과 브라우저는 사용자의 화면·마우스·키보드를 빼앗지 않도록 기본으로 가상 데스크톱 「Claudy 시험」에 격리한다(app_open·browser_run 의 isolate). \
+격리한 창은 window_list 로 찾고 window_capture 로 본다. 사용자 화면 전체를 찍는 screen_capture 는 사용자가 요청할 때만 쓴다. \
+COM 등으로 따로 뜬 시험 프로그램은 window_isolate 로 격리 대상에 올린다. 실제 마우스·키보드 입력(SendInput, SetCursorPos)과 SetForegroundWindow 를 쓰는 스크립트는 짜지 않는다. \
 한글(HWPFrame.HwpObject) 자동화 스크립트는 객체를 만든 직후 반드시 RegisterModule(\"FilePathCheckDLL\", \"FilePathCheckerModule\") 을 부른다. 빠뜨리면 파일을 열 때마다 「접근 허용」 창이 떠서 작업이 멈춘다.";
 const INSTRUCTIONS: &str = INSTRUCTIONS_BASE;
 
@@ -186,6 +189,40 @@ pub struct AppOpenParams {
     pub args: Option<Vec<String>>,
     /// 떠오르기를 기다릴 시간(초). 기본 15, 최대 60
     pub wait_sec: Option<u64>,
+    /// Windows: 시험용 가상 데스크톱에서 최소화·비활성으로 띄워 사용자 화면·입력을 건드리지 않는다. 기본 true. 사용자에게 보여 줄 창만 false
+    pub isolate: Option<bool>,
+    /// Windows 격리 실행에 쓸 가상 데스크톱 이름. 기본 「Claudy 시험」. 없으면 만든다(화면 전환 없음)
+    pub desktop: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WindowListParams {
+    /// 호스트 이름 (hosts_list 로 확인)
+    pub host: String,
+    /// 이 프로세스의 창만
+    pub pid: Option<u32>,
+    /// true 면 사용자 창까지 보이는 최상위 창 전체. 기본은 격리 실행한 프로그램(과 그 자식)의 창만
+    pub all: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WindowCaptureParams {
+    /// 호스트 이름 (hosts_list 로 확인)
+    pub host: String,
+    /// 창 핸들(window_list 의 hwnd, 예 0x1A2B3C)
+    pub hwnd: String,
+    /// 그림 가로 최대 픽셀. 기본 1600
+    pub max_width: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WindowIsolateParams {
+    /// 호스트 이름 (hosts_list 로 확인)
+    pub host: String,
+    /// 이미 떠 있는 프로그램의 프로세스 번호(COM 으로 뜬 Excel 등)
+    pub pid: u32,
+    /// 가상 데스크톱 이름. 기본 「Claudy 시험」
+    pub desktop: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -198,6 +235,8 @@ pub struct BrowserRunParams {
     pub script: Option<String>,
     /// true 면 스크립트를 실행하지 않고 사용 안내를 돌려준다
     pub guide: Option<bool>,
+    /// Windows: 브라우저를 새로 띄울 때 시험용 가상 데스크톱에 최소화·비활성으로 띄운다. 기본 true
+    pub isolate: Option<bool>,
     /// 제한 시간(초). 기본 90, 최대 900
     pub timeout_sec: Option<u64>,
 }
@@ -502,7 +541,7 @@ impl Claudy {
         }
     }
 
-    #[tool(description = "호스트의 사용자 화면에 프로그램을 띄운다(한글, 메모장, Final Cut Pro 등 창이 있는 프로그램). run_command 로 띄운 창은 원격(ssh) 호스트에서 화면에 보이지 않으므로 이 도구를 쓴다. Windows 원격은 로그온한 사용자 화면에서 실행하는 예약 작업을 잠깐 만들어 실행하고 지운다. macOS 는 open -a 를 쓴다. 띄운 뒤에는 기다리지 않고 프로세스 번호만 돌려준다.")]
+    #[tool(description = "호스트에서 창이 있는 프로그램을 띄운다(한글, 메모장, Excel, 직접 만든 앱 등). Windows 는 기본으로 격리 실행한다. 시험용 가상 데스크톱(기본 「Claudy 시험」)에 최소화·비활성으로 띄워 사용자의 화면·마우스·키보드를 건드리지 않고, 감시기가 그 프로그램이 새로 여는 창도 그 데스크톱으로 옮기며 전경을 가져가면 되돌린다. 사용자에게 보여 줄 창만 isolate=false. 격리한 창은 window_list·window_capture 로 본다. macOS 는 open -a 를 쓴다. 띄운 뒤에는 기다리지 않고 프로세스 번호만 돌려준다.")]
     async fn app_open(&self, Parameters(p): Parameters<AppOpenParams>) -> CallToolResult {
         let (ctx, _) = match Ctx::load() {
             Ok(v) => v,
@@ -518,7 +557,17 @@ impl Claudy {
         let wait = p.wait_sec.unwrap_or(15).clamp(1, 60);
         let args = p.args.clone().unwrap_or_default();
         let windows = host.remote_windows() || (host.kind != "ssh" && cfg!(windows));
-        let body = if windows { app_open_ps(&p.program, &args, wait, host.kind == "ssh") } else { format!("{LINUX_GUI_ENV}{}", app_open_sh(&p.program, &args)) };
+        let isolate = windows && p.isolate.unwrap_or(true);
+        if isolate && host.remote_windows() && !host.desktop_session() {
+            return err_text("격리 실행은 화면 세션 실행(desktop = true)인 Windows 호스트만 된다. 사용자 화면에 띄우려면 isolate=false".into());
+        }
+        let body = if isolate {
+            app_open_isolated_ps(&p.program, &args, wait, &desk_name(&p.desktop))
+        } else if windows {
+            app_open_ps(&p.program, &args, wait, host.kind == "ssh")
+        } else {
+            format!("{LINUX_GUI_ENV}{}", app_open_sh(&p.program, &args))
+        };
         if let Some(reason) = safety::check_deny(&ctx.deny, &body) {
             log_audit("app_open", &p.host, &p.program, None, 0, true);
             return err_text(reason);
@@ -533,6 +582,113 @@ impl Claudy {
                 ok_text(format_cmd(&p.host, &cap))
             }
             Err(e) => err_text(e),
+        }
+    }
+
+    #[tool(description = "Windows 호스트의 가상 데스크톱 목록과 창 목록을 본다. 기본은 격리 실행한 프로그램(과 그 자식 프로세스)의 창만, all=true 면 보이는 최상위 창 전체. hwnd 는 window_capture 에 쓴다. 격리 감시기 상태와 최근 기록도 함께 보인다.")]
+    async fn window_list(&self, Parameters(p): Parameters<WindowListParams>) -> CallToolResult {
+        let host = match desk_host(&p.host) {
+            Ok(h) => h,
+            Err(e) => return err_text(e),
+        };
+        let body = format!(
+            "{}\n[ClaudyDesk.D]::ListDesktops()\n'@@JSON'\n[ClaudyDesk.D]::ListWindows({}, ${})\n'@@GUARD'\n{}",
+            desk_head_ps(),
+            p.pid.unwrap_or(0),
+            if p.all.unwrap_or(false) { "true" } else { "false" },
+            DESK_STATUS_PS
+        );
+        match run_simple(&host, &body, 60).await {
+            Ok(out) => {
+                log_audit("window_list", &p.host, "창 목록", Some(0), 0, false);
+                ok_text(format!("[{}]\n{}", p.host, format_window_list(&out)))
+            }
+            Err(e) => err_text(format!("[{}] 창 목록을 읽지 못했다: {e}", p.host)),
+        }
+    }
+
+    #[tool(description = "Windows 호스트의 창 하나를 찍어 그림으로 돌려준다. 사용자가 보지 않는 가상 데스크톱의 창도 찍으며, 최소화된 창은 잠시 비활성으로 펼쳐 찍고 다시 최소화한다. 사용자 화면 전체는 찍지 않는다. GPU 로 그리는 창은 검게 나올 수 있다(결과에 검은 비율 표시).")]
+    async fn window_capture(&self, Parameters(p): Parameters<WindowCaptureParams>) -> CallToolResult {
+        let (ctx, _) = match Ctx::load() {
+            Ok(v) => v,
+            Err(e) => return err_text(e),
+        };
+        let host = match desk_host(&p.host) {
+            Ok(h) => h,
+            Err(e) => return err_text(e),
+        };
+        let Some(hwnd) = parse_hwnd(&p.hwnd) else {
+            return err_text(format!("hwnd 형식이 아니다: {} (예 0x1A2B3C)", p.hwnd));
+        };
+        let this_pc = match ctx.cfg.hosts.iter().find(|h| h.kind != "ssh") {
+            Some(h) => h.clone(),
+            None => return err_text("이 PC 호스트가 없다".into()),
+        };
+        let body = format!(
+            "{}\n$f=Join-Path $env:TEMP ('claudy-win-'+[guid]::NewGuid().ToString('N').Substring(0,8)+'.png')\n$r=[ClaudyDesk.D]::Capture([IntPtr][int64]{hwnd}, $f, {})\n\"saved $f $r\"",
+            desk_head_ps(),
+            p.max_width.unwrap_or(1600).clamp(200, 4000)
+        );
+        let out = match run_simple(&host, &body, 60).await {
+            Ok(o) => o,
+            Err(e) => return err_text(format!("창을 찍지 못했다: {e}")),
+        };
+        let Some(line) = out.lines().find_map(|l| l.trim().strip_prefix("saved ").map(str::to_string)) else {
+            return err_text(format!("창을 찍지 못했다: {}", out.trim()));
+        };
+        let parts: Vec<&str> = line.rsplitn(4, ' ').collect(); // 검은비율, 세로, 가로, 경로
+        if parts.len() < 4 {
+            return err_text(format!("창을 찍지 못했다: {line}"));
+        }
+        let (dark, hgt, wid, remote) = (parts[0], parts[1], parts[2], parts[3].to_string());
+        let dir = util::base_dir().join("captures");
+        let _ = std::fs::create_dir_all(&dir);
+        let stamp = util::local_now().format("%Y%m%d-%H%M%S").to_string();
+        let local = dir.join(format!("{}-win-{stamp}.png", p.host.replace(|c: char| !c.is_ascii_alphanumeric() && c != '-', "_")));
+        if host.kind == "ssh" {
+            if let Err(e) = file_copy_run(&host, &remote, &this_pc, &local.to_string_lossy(), false, Duration::from_secs(120)).await {
+                return err_text(format!("그림을 가져오지 못했다: {e}"));
+            }
+            let _ = run_simple(&host, &format!("Remove-Item -LiteralPath {} -ErrorAction SilentlyContinue", ps_q(&remote)), 30).await;
+        } else {
+            if let Err(e) = std::fs::copy(&remote, &local) {
+                return err_text(format!("그림을 옮기지 못했다: {e}"));
+            }
+            let _ = std::fs::remove_file(&remote);
+        }
+        let bytes = match std::fs::read(&local) {
+            Ok(b) => b,
+            Err(e) => return err_text(format!("그림을 읽지 못했다: {e}")),
+        };
+        log_audit("window_capture", &p.host, &format!("0x{hwnd:X}"), Some(0), 0, false);
+        let warn = if dark.parse::<u32>().unwrap_or(0) >= 90 { " · 거의 검은 그림이다(GPU 로 그리는 창은 숨은 데스크톱에서 찍히지 않을 수 있다. 앱 자체 화면 저장 기능을 쓴다)" } else { "" };
+        CallToolResult::success(vec![
+            Content::text(format!("{} 창 0x{hwnd:X} {wid}x{hgt} 검은 비율 {dark}% {}{warn}", p.host, local.display())),
+            Content::image(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes), "image/png"),
+        ])
+    }
+
+    #[tool(description = "Windows 호스트에서 이미 떠 있는 프로그램(COM 으로 뜬 Excel·한글 등)을 격리 대상에 올린다. 그 프로그램의 창을 시험용 가상 데스크톱으로 옮기고, 이후 새 창과 전경 가져가기도 감시기가 막는다.")]
+    async fn window_isolate(&self, Parameters(p): Parameters<WindowIsolateParams>) -> CallToolResult {
+        let host = match desk_host(&p.host) {
+            Ok(h) => h,
+            Err(e) => return err_text(e),
+        };
+        let name = desk_name(&p.desktop);
+        let body = format!(
+            "{}\n{}\n$r=([ClaudyDesk.D]::Adopt({}, {})).Split(' ')\n\"격리함: pid $($r[0]), 옮긴 창 $($r[1]), 데스크톱 「{}」\"",
+            desk_head_ps(),
+            DESK_GUARD_PS,
+            p.pid,
+            ps_q(&name),
+            name.replace('"', "")
+        );
+        match run_simple(&host, &body, 60).await {
+            Ok(out) => {
+                log_audit("window_isolate", &p.host, &p.pid.to_string(), Some(0), 0, false);
+                ok_text(format!("[{}]\n{}", p.host, out.trim()))
+            }
+            Err(e) => err_text(format!("[{}] 격리하지 못했다: {e}", p.host)),
         }
     }
 
@@ -563,7 +719,12 @@ impl Claudy {
         }
         let job = format!("export default async function({{ page, context, browser }}) {{\n{script}\n}}\n");
         let id = uuid::Uuid::new_v4().simple().to_string()[..10].to_string();
-        let body = if windows { browser_ps(&name, &job, &id) } else { format!("{LINUX_GUI_ENV}{}", browser_sh(&name, &job, &id)) };
+        let body = if windows {
+            let pre = if p.isolate.unwrap_or(true) { browser_isolate_ps(&name) } else { String::new() };
+            format!("{pre}{}", browser_ps(&name, &job, &id))
+        } else {
+            format!("{LINUX_GUI_ENV}{}", browser_sh(&name, &job, &id))
+        };
         let plan = match exec::command_plan(&host, None, &body) {
             Ok(pl) => pl,
             Err(e) => return err_text(e),
@@ -898,6 +1059,169 @@ else echo "그림 변환 프로그램이 없다. imagemagick 또는 ffmpeg 를 �
 rm -f "$r"; [ -s "$f" ] && echo "saved $f""#;
 
 /// 호스트에서 명령 하나를 실행해 표준출력을 돌려준다(종료 코드 0 이 아니면 오류)
+/// 격리 도우미 C# 원본. 처음 쓸 때 호스트의 .claudy\tools 에 DLL 로 컴파일한다
+const DESK_CS: &str = include_str!("../res/claudy_desk.cs");
+
+/// 감시기가 없으면 창 없는 PowerShell 로 띄운다(하나만 돈다. 핸들 상속 없음)
+const DESK_GUARD_PS: &str = r#"[void][ClaudyDesk.D]::StartGuard($dll)"#;
+
+/// 감시기 상태와 최근 기록
+const DESK_STATUS_PS: &str = r#"$gm=$null; try { $gm=[Threading.Mutex]::OpenExisting('Local\ClaudyDeskGuard') } catch {}
+if ($gm) { $gm.Dispose(); '감시기: 실행 중' } else { '감시기: 꺼짐(격리 실행하면 켜진다)' }
+"격리 대상 pid: $(([ClaudyDesk.D]::Watched() | ForEach-Object { $_ }) -join ', ')"
+$lf=[ClaudyDesk.D]::LogFile; if (Test-Path $lf) { '최근 기록:'; Get-Content $lf -Encoding UTF8 -Tail 8 }"#;
+
+/// 도우미를 올리는 머리말. 원본이 바뀌면 파일 이름(해시)이 바뀌어 다시 컴파일한다
+fn desk_head_ps() -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in DESK_CS.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!(
+        r#"$ErrorActionPreference='Stop'
+$T=Join-Path $env:USERPROFILE '.claudy\tools'; New-Item -ItemType Directory -Force $T | Out-Null
+$dll=Join-Path $T 'ClaudyDesk-{hash:08x}.dll'
+if (-not ('ClaudyDesk.D' -as [type])) {{
+  if (-not (Test-Path $dll)) {{
+    $src=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}'))
+    Add-Type -TypeDefinition $src -ReferencedAssemblies System.Drawing -OutputAssembly $dll -OutputType Library
+    Get-ChildItem $T -Filter 'ClaudyDesk-*.dll' | Where-Object {{ $_.FullName -ne $dll }} | Remove-Item -ErrorAction SilentlyContinue
+  }}
+  Add-Type -Path $dll
+}}"#,
+        hash = (h & 0xffff_ffff) as u32,
+        b64 = util::b64(DESK_CS),
+    )
+}
+
+fn desk_name(d: &Option<String>) -> String {
+    d.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("Claudy 시험").to_string()
+}
+
+/// 창 도구를 쓸 수 있는 Windows 호스트인지
+fn desk_host(name: &str) -> Result<HostCfg, String> {
+    let (ctx, _) = Ctx::load()?;
+    let host = ctx.host(name)?.clone();
+    let windows = host.remote_windows() || (host.kind != "ssh" && cfg!(windows));
+    if !windows {
+        return Err("창 도구는 Windows 호스트만 된다".into());
+    }
+    if host.remote_windows() && !host.desktop_session() {
+        return Err("이 Windows 호스트는 화면 세션 실행(desktop = true)이 꺼져 있어 창을 다룰 수 없다".into());
+    }
+    Ok(host)
+}
+
+fn parse_hwnd(s: &str) -> Option<i64> {
+    let t = s.trim();
+    match t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
+        Some(hex) => i64::from_str_radix(hex, 16).ok(),
+        None => t.parse().ok(),
+    }
+}
+
+/// window_list 출력(데스크톱 목록, @@JSON, 창 JSON, @@GUARD, 감시기 상태)을 읽기 쉬운 줄로
+fn format_window_list(out: &str) -> String {
+    let (desks, rest) = out.split_once("@@JSON").unwrap_or((out, ""));
+    let (json, guard) = rest.split_once("@@GUARD").unwrap_or((rest, ""));
+    let mut s = String::from("가상 데스크톱\n");
+    s.push_str(desks.trim());
+    s.push_str("\n\n창\n");
+    match serde_json::from_str::<Vec<serde_json::Value>>(json.trim()) {
+        Ok(list) if list.is_empty() => s.push_str("(해당 창 없음)\n"),
+        Ok(list) => {
+            for w in list {
+                let g = |k: &str| w.get(k).cloned().unwrap_or_default();
+                let flags = [("isolated", "격리"), ("minimized", "최소화"), ("owned", "딸린 창"), ("foreground", "맨 앞")]
+                    .iter()
+                    .filter(|(k, _)| g(k).as_bool() == Some(true))
+                    .map(|(_, v)| *v)
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let r = g("rect");
+                s.push_str(&format!(
+                    "{} pid {} {} 「{}」 데스크톱 {} {}x{} {}\n",
+                    g("hwnd").as_str().unwrap_or(""),
+                    g("pid"),
+                    g("exe").as_str().unwrap_or(""),
+                    g("title").as_str().unwrap_or(""),
+                    g("desktop"),
+                    r.get(2).cloned().unwrap_or_default(),
+                    r.get(3).cloned().unwrap_or_default(),
+                    flags
+                ));
+            }
+        }
+        Err(_) => s.push_str(json.trim()),
+    }
+    s.push('\n');
+    s.push_str(guard.trim());
+    s
+}
+
+/// Windows 격리 실행: 프로그램 경로를 찾고 시험용 가상 데스크톱에 최소화·비활성으로 띄운다
+fn app_open_isolated_ps(program: &str, args: &[String], wait: u64, desktop: &str) -> String {
+    let arg_line = args
+        .iter()
+        .map(|a| if a.contains(' ') || a.is_empty() { format!("\"{}\"", a.replace('"', "\\\"")) } else { a.clone() })
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        r#"{head}
+$exe={prog}; $argLine={args}
+if (-not (Test-Path -LiteralPath $exe)) {{
+  $c = Get-Command $exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($c) {{ $exe = $c.Source }} else {{
+    $n = if ($exe -like '*.exe') {{ $exe }} else {{ "$exe.exe" }}
+    foreach ($root in 'HKCU:','HKLM:') {{ $ap = (Get-ItemProperty "$root\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$n" -ErrorAction SilentlyContinue).'(default)'; if ($ap) {{ $exe = $ap.Trim('"'); break }} }}
+  }}
+}}
+if (-not (Test-Path -LiteralPath $exe)) {{ Write-Output "프로그램을 찾지 못했다: $exe"; exit 2 }}
+{guard}
+$r=([ClaudyDesk.D]::Launch($exe, $argLine, '', {desk}, {ms})).Split(' ')
+"격리 실행됨: $exe (pid $($r[0]), 가상 데스크톱 「{desk_plain}」, 옮긴 창 $($r[1]))"
+if ($r[1] -eq '0' -and $r[2] -eq 'exited') {{ '띄운 프로세스가 창 없이 바로 끝났다. 이미 떠 있는 프로그램에 넘기는 단일 인스턴스 프로그램(Windows 11 메모장 등)은 격리되지 않는다. window_list(all=true)로 확인한다'; exit 4 }}
+elseif ($r[1] -eq '0') {{ '창이 아직 없다. 나중에 뜨는 창은 감시기가 옮긴다' }}"#,
+        head = desk_head_ps(),
+        prog = ps_q(program),
+        args = ps_q(&arg_line),
+        desk = ps_q(desktop),
+        desk_plain = desktop.replace('"', ""),
+        ms = wait * 1000,
+        guard = DESK_GUARD_PS,
+    )
+}
+
+/// Windows browser_run 앞부분: 디버깅 포트가 닫혀 있으면 브라우저를 격리 실행으로 띄운다
+fn browser_isolate_ps(name: &str) -> String {
+    let port = match name {
+        "edge" => 9232,
+        "aside" => 9233,
+        _ => 9231,
+    };
+    format!(
+        r#"$alive=$false; try {{ $alive=(Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200 }} catch {{}}
+if (-not $alive) {{
+{head}
+  $pf=$env:ProgramFiles; $pf86=${{env:ProgramFiles(x86)}}; $la=$env:LOCALAPPDATA
+  $cand=@{{ chrome=@("$pf\Google\Chrome\Application\chrome.exe","$pf86\Google\Chrome\Application\chrome.exe","$la\Google\Chrome\Application\chrome.exe"); edge=@("$pf86\Microsoft\Edge\Application\msedge.exe","$pf\Microsoft\Edge\Application\msedge.exe"); aside=@("$pf\Aside\Application\Aside.exe","$la\Aside\Application\Aside.exe") }}['{name}']
+  $bx=$cand | Where-Object {{ Test-Path $_ }} | Select-Object -First 1
+  if ($bx) {{
+    $prof=Join-Path $env:USERPROFILE '.claudy\browser\profiles\{name}'; New-Item -ItemType Directory -Force $prof | Out-Null
+    {guard}
+    $r=([ClaudyDesk.D]::Launch($bx, "--remote-debugging-port={port} `"--user-data-dir=$prof`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion", '', 'Claudy 시험', 15000)).Split(' ')
+    [Console]::Error.WriteLine("[claudy] {name} 을 가상 데스크톱 「Claudy 시험」에 격리 실행했다(pid $($r[0]))")
+    for ($i=0; $i -lt 60; $i++) {{ try {{ if ((Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 1).StatusCode -eq 200) {{ break }} }} catch {{}}; Start-Sleep -Milliseconds 300 }}
+  }}
+  $ErrorActionPreference='Continue'
+}}
+"#,
+        head = desk_head_ps(),
+        guard = DESK_GUARD_PS.replace('\n', "\n    "),
+    )
+}
+
 async fn run_simple(host: &config::HostCfg, cmd: &str, secs: u64) -> Result<String, String> {
     let plan = exec::command_plan(host, None, cmd)?;
     let cap = exec::run(&plan, Duration::from_secs(secs)).await?;
@@ -1134,5 +1458,35 @@ mod app_open_tests {
         let raw = "#< CLIXML\n<Objs Version=\"1.1.0.1\"><S S=\"Error\">python : 오류 &lt;x&gt;_x000D__x000A_</S><S S=\"Error\">위치 줄:8 문자:1_x000D__x000A_</S><S S=\"Error\">+ python -c ..._x000D__x000A_</S><S S=\"Error\">ModuleNotFoundError: pyhwpx_x000D__x000A_</S></Objs>";
         assert_eq!(util::decode_clixml(raw), "python : 오류 <x>\nModuleNotFoundError: pyhwpx");
         assert_eq!(util::decode_clixml("plain"), "plain");
+    }
+}
+
+#[cfg(test)]
+mod desk_tests {
+    use super::*;
+
+    #[test]
+    fn hwnd_parse() {
+        assert_eq!(parse_hwnd("0x1A2B"), Some(0x1A2B));
+        assert_eq!(parse_hwnd("6699"), Some(6699));
+        assert_eq!(parse_hwnd("zz"), None);
+    }
+
+    #[test]
+    fn window_list_format() {
+        let out = "데스크톱 1 「」 ← 사용자가 보는 중\n@@JSON\n[{\"hwnd\":\"0x10\",\"pid\":5,\"exe\":\"a.exe\",\"title\":\"제목\",\"class\":\"C\",\"desktop\":4,\"isolated\":true,\"minimized\":true,\"owned\":false,\"foreground\":false,\"rect\":[0,0,800,600]}]\n@@GUARD\n감시기: 실행 중";
+        let s = format_window_list(out);
+        assert!(s.contains("0x10 pid 5 a.exe 「제목」 데스크톱 4 800x600 격리,최소화"));
+        assert!(s.contains("감시기: 실행 중"));
+    }
+
+    /// CLAUDY_DUMP_PS 폴더가 있으면 PowerShell 본문을 파일로 남긴다(실기 시험용)
+    #[test]
+    fn dump_ps() {
+        let Ok(dir) = std::env::var("CLAUDY_DUMP_PS") else { return };
+        let w = |n: &str, s: String| std::fs::write(format!("{dir}/{n}.ps1"), format!("\u{feff}{s}")).unwrap();
+        w("open", app_open_isolated_ps("charmap", &[], 10, "Claudy 시험"));
+        w("list", format!("{}\n[ClaudyDesk.D]::ListDesktops()\n'@@JSON'\n[ClaudyDesk.D]::ListWindows(0, $false)\n'@@GUARD'\n{}", desk_head_ps(), DESK_STATUS_PS));
+        w("browser", browser_isolate_ps("chrome"));
     }
 }

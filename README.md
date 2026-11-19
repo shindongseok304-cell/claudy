@@ -15,7 +15,7 @@ Claudy 는 PuTTY 같은 SSH 접속 프로그램의 역할을 Claude 채팅에서
 | `server/` | MCP 서버(Rust, rmcp). 실행 파일 하나 |
 | `manager/` | 설정 앱(Rust, tao·wry). Windows WebView2, macOS WKWebView, Linux WebKitGTK |
 
-## 도구 (서버 0.1.26, 13종)
+## 도구 (서버 0.1.27, 16종)
 
 | 도구 | 기능 |
 |---|---|
@@ -24,12 +24,15 @@ Claudy 는 PuTTY 같은 SSH 접속 프로그램의 역할을 Claude 채팅에서
 | `claude_ask` | 호스트의 Claude Code 에 작업 지시, 대화 이어가기 |
 | `job_start` · `job_status` · `job_list` | 백그라운드 작업 |
 | `file_copy` | 호스트 사이 파일·폴더 복사 |
-| `app_open` | 호스트의 사용자 화면에 프로그램 실행 |
+| `app_open` | 창이 있는 프로그램 실행. Windows 는 시험용 가상 데스크톱에 최소화·비활성으로 격리 실행(기본) |
 | `screen_capture` | 호스트의 사용자 화면 찍기 |
 | `host_status` | 호스트의 Claudy 판, 터널·갱신 기록 |
 | `claudy_update` | Windows 호스트의 Claudy 원격 갱신 |
 | `ego_run` | ego 브라우저 스크립트 실행 |
-| `browser_run` | Chrome·Edge·Aside 를 조작용 프로필로 띄우고 Playwright(CDP)로 조작 |
+| `browser_run` | Chrome·Edge·Aside 를 조작용 프로필로 띄우고 Playwright(CDP)로 조작. Windows 는 시험용 가상 데스크톱에 격리 |
+| `window_list` | Windows 가상 데스크톱과 창 목록, 격리 감시기 상태 |
+| `window_capture` | Windows 창 하나 찍기(숨은 가상 데스크톱의 창 포함) |
+| `window_isolate` | 이미 떠 있는 Windows 프로그램을 격리 대상으로 |
 
 ## 설정 파일
 
@@ -66,6 +69,16 @@ cd manager && cargo build --release
 
 Windows 판은 `x86_64-pc-windows-gnu`, macOS 판은 `aarch64-apple-darwin`, Linux 판은 `x86_64-unknown-linux-gnu` 대상으로 빌드합니다.
 설치 꾸러미(.mcpb)는 `server/mcpb/manifest.json` 과 실행 파일로 `npx @anthropic-ai/mcpb pack` 을 실행해 만듭니다.
+
+## 사용자 화면 비침해 (Windows)
+
+개발·시험용 프로그램이 사용자의 화면, 마우스, 키보드를 빼앗지 않게 합니다.
+
+- `app_open`·`browser_run` 이 띄우는 프로그램은 가상 데스크톱 「Claudy 시험」(없으면 만듦, 화면 전환 없음)에 최소화·비활성으로 뜬 뒤 그 데스크톱에서 펼쳐집니다
+- 감시기가 격리 대상과 그 자식 프로세스의 새 창을 그 데스크톱으로 옮기고, 전경을 가져가면 비활성으로 내린 뒤 사용자 화면을 원래 데스크톱으로 되돌립니다
+- 실제 마우스·키보드 입력(SendInput, SetCursorPos)과 SetForegroundWindow 는 쓰지 않습니다. 브라우저는 CDP 입력 이벤트로 조작합니다
+- 기록은 사용자 폴더의 `.claudy/isolate.log`. Windows 11 24H2 이후가 필요합니다
+- Windows 11 메모장처럼 이미 떠 있는 프로세스에 일을 넘기는 단일 인스턴스 프로그램은 격리되지 않습니다
 
 ## 보안
 
