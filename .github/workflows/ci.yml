@@ -1,0 +1,22 @@
+name: 시험
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            server
+            manager
+      - name: 설정 앱 빌드에 필요한 라이브러리
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libgtk-3-dev libxdo-dev
+      - name: 서버 시험
+        run: cd server && cargo test --release
+      - name: 설정 앱 시험
+        run: cd manager && cargo test --release

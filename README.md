@@ -55,6 +55,8 @@ identity_file = "~/.ssh/id_ed25519_claudy"
 
 ## 빌드
 
+판올림·자동 빌드 절차는 [DEVELOP.md](DEVELOP.md) 에 있습니다.
+
 ```sh
 # 서버
 cd server && cargo build --release

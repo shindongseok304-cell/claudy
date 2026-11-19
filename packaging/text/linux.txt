@@ -1,0 +1,5 @@
+1. 압축을 풀고 터미널에서 sh install.sh 를 실행합니다.
+2. Claude Code 가 설치되어 있으면 claudy 가 자동으로 등록됩니다(claude mcp list 로 확인).
+3. 설정 앱은 프로그램 메뉴의 Claudy 로 엽니다. 알림 영역 아이콘으로 남습니다.
+4. 설정 앱에는 libwebkit2gtk-4.1-0, libayatana-appindicator3-1 이 필요합니다.
+5. 설정은 사용자 폴더의 .claudy 폴더에 저장됩니다. 제거는 sh uninstall.sh 입니다.
