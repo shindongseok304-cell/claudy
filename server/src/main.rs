@@ -646,10 +646,12 @@ impl Claudy {
         let stamp = util::local_now().format("%Y%m%d-%H%M%S").to_string();
         let local = dir.join(format!("{}-win-{stamp}.png", p.host.replace(|c: char| !c.is_ascii_alphanumeric() && c != '-', "_")));
         if host.kind == "ssh" {
-            if let Err(e) = file_copy_run(&host, &remote, &this_pc, &local.to_string_lossy(), false, Duration::from_secs(120)).await {
+            // scp 는 Windows 경로를 C:/... 꼴로 받는다
+            let fetched = file_copy_run(&host, &remote.replace('\\', "/"), &this_pc, &local.to_string_lossy(), false, Duration::from_secs(120)).await;
+            let _ = run_simple(&host, &format!("Remove-Item -LiteralPath {} -ErrorAction SilentlyContinue", ps_q(&remote)), 30).await;
+            if let Err(e) = fetched {
                 return err_text(format!("그림을 가져오지 못했다: {e}"));
             }
-            let _ = run_simple(&host, &format!("Remove-Item -LiteralPath {} -ErrorAction SilentlyContinue", ps_q(&remote)), 30).await;
         } else {
             if let Err(e) = std::fs::copy(&remote, &local) {
                 return err_text(format!("그림을 옮기지 못했다: {e}"));
