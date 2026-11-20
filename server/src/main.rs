@@ -28,7 +28,7 @@ claude_ask 는 호출마다 Claude Code 를 새로 띄워 수십 초와 별도 �
 로그인은 사용자 브라우저의 비밀번호 관리 확장 프로그램에 맡긴다. 아이디·비밀번호를 채팅에서 묻거나 받거나 스크립트에 넣지 않는다. \
 호스트 사이 파일 복사는 file_copy 를 쓴다(scp 를 직접 짜지 않는다). Windows 호스트의 Claudy 갱신은 claudy_update 를 쓴다. \
 창이 있는 프로그램은 app_open 으로 띄운다(원격 호스트에서 run_command 로 띄운 창은 화면에 보이지 않는다). \
-Windows 에서 개발·시험용으로 띄우는 프로그램과 브라우저는 사용자의 화면·마우스·키보드를 빼앗지 않도록 기본으로 가상 데스크톱 「Claudy 시험」에 격리한다(app_open·browser_run 의 isolate). \
+Windows 에서 개발·시험용으로 띄우는 프로그램과 브라우저는 사용자의 화면·마우스·키보드를 빼앗지 않도록 기본으로 격리한다(app_open·browser_run 의 isolate). 기본 mode=hidden 은 별도 숨은 화면이라 사용자 화면을 가져갈 수 없고, GPU 앱이 그리지 못하면 mode=desktop(가상 데스크톱 「Claudy 시험」). \
 격리한 창은 window_list 로 찾고 window_capture 로 보며 window_input 으로 조작한다(단추·입력란 이름으로 누르기·값 넣기가 먼저, 좌표 클릭은 다음). 사용자 화면 전체를 찍는 screen_capture 는 사용자가 요청할 때만 쓴다. \
 COM 등으로 따로 뜬 시험 프로그램은 window_isolate 로 격리 대상에 올린다. 실제 마우스·키보드 입력(SendInput, SetCursorPos)과 SetForegroundWindow 를 쓰는 스크립트는 짜지 않는다. \
 한글(HWPFrame.HwpObject) 자동화 스크립트는 객체를 만든 직후 반드시 RegisterModule(\"FilePathCheckDLL\", \"FilePathCheckerModule\") 을 부른다. 빠뜨리면 파일을 열 때마다 「접근 허용」 창이 떠서 작업이 멈춘다.";
@@ -191,7 +191,9 @@ pub struct AppOpenParams {
     pub wait_sec: Option<u64>,
     /// Windows: 시험용 가상 데스크톱에서 최소화·비활성으로 띄워 사용자 화면·입력을 건드리지 않는다. 기본 true. 사용자에게 보여 줄 창만 false
     pub isolate: Option<bool>,
-    /// Windows 격리 실행에 쓸 가상 데스크톱 이름. 기본 「Claudy 시험」. 없으면 만든다(화면 전환 없음)
+    /// Windows 격리 방식. hidden(기본): 별도 Win32 숨은 화면에 띄워 사용자 화면을 절대 가져가지 못함, 사용자는 볼 수 없고 window_capture 로만 봄, GPU 앱은 그리지 못할 수 있음. desktop: 가상 데스크톱(사용자가 Win+Tab 으로 볼 수 있음, GPU 앱 가능, 무입력 약 3분 뒤 화면을 잠깐 가져갈 수 있어 감시기가 되돌림)
+    pub mode: Option<String>,
+    /// 가상 데스크톱 이름. 주면 mode 기본값이 desktop 이 된다. 기본 「Claudy 시험」. 없으면 만든다(화면 전환 없음)
     pub desktop: Option<String>,
 }
 
@@ -263,8 +265,10 @@ pub struct BrowserRunParams {
     pub script: Option<String>,
     /// true 면 스크립트를 실행하지 않고 사용 안내를 돌려준다
     pub guide: Option<bool>,
-    /// Windows: 브라우저를 새로 띄울 때 시험용 가상 데스크톱에 최소화·비활성으로 띄운다. 기본 true
+    /// Windows: 브라우저를 새로 띄울 때 격리한다. 기본 true(숨은 화면, GPU 끔)
     pub isolate: Option<bool>,
+    /// Windows 격리 방식. hidden(기본, 숨은 화면) 또는 desktop(가상 데스크톱 「Claudy 시험」)
+    pub mode: Option<String>,
     /// 제한 시간(초). 기본 90, 최대 900
     pub timeout_sec: Option<u64>,
 }
@@ -589,7 +593,12 @@ impl Claudy {
         if isolate && host.remote_windows() && !host.desktop_session() {
             return err_text("격리 실행은 화면 세션 실행(desktop = true)인 Windows 호스트만 된다. 사용자 화면에 띄우려면 isolate=false".into());
         }
-        let body = if isolate {
+        // desktop 이름을 준 호출(Inside·iCAD 지침의 기존 방식)은 가상 데스크톱 방식 그대로 둔다
+        let default_mode = if p.desktop.is_some() { "desktop" } else { "hidden" };
+        let hidden = p.mode.as_deref().map(|m| m.trim().to_lowercase()).unwrap_or_else(|| default_mode.into()) != "desktop";
+        let body = if isolate && hidden {
+            app_open_hidden_ps(&p.program, &args, wait)
+        } else if isolate {
             app_open_isolated_ps(&p.program, &args, wait, &desk_name(&p.desktop))
         } else if windows {
             app_open_ps(&p.program, &args, wait, host.kind == "ssh")
@@ -816,7 +825,8 @@ impl Claudy {
         let job = format!("export default async function({{ page, context, browser }}) {{\n{script}\n}}\n");
         let id = uuid::Uuid::new_v4().simple().to_string()[..10].to_string();
         let body = if windows {
-            let pre = if p.isolate.unwrap_or(true) { browser_isolate_ps(&name) } else { String::new() };
+            let hidden = p.mode.as_deref().map(|m| m.trim().to_lowercase()).unwrap_or_else(|| "hidden".into()) != "desktop";
+            let pre = if p.isolate.unwrap_or(true) { browser_isolate_ps(&name, hidden) } else { String::new() };
             format!("{pre}{}", browser_ps(&name, &job, &id))
         } else {
             format!("{LINUX_GUI_ENV}{}", browser_sh(&name, &job, &id))
@@ -1289,8 +1299,37 @@ elseif ($r[1] -eq '0') {{ '창이 아직 없다. 나중에 뜨는 창은 감시�
     )
 }
 
+/// Windows 숨은 화면 실행: 별도 Win32 데스크톱에 띄운다. 감시기는 필요 없다(사용자 화면 전경을 가져갈 수 없음)
+fn app_open_hidden_ps(program: &str, args: &[String], wait: u64) -> String {
+    let arg_line = args
+        .iter()
+        .map(|a| if a.contains(' ') || a.is_empty() { format!("\"{}\"", a.replace('"', "\\\"")) } else { a.clone() })
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        r#"{head}
+$exe={prog}; $argLine={args}
+if (-not (Test-Path -LiteralPath $exe)) {{
+  $c = Get-Command $exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($c) {{ $exe = $c.Source }} else {{
+    $n = if ($exe -like '*.exe') {{ $exe }} else {{ "$exe.exe" }}
+    foreach ($root in 'HKCU:','HKLM:') {{ $ap = (Get-ItemProperty "$root\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$n" -ErrorAction SilentlyContinue).'(default)'; if ($ap) {{ $exe = $ap.Trim('"'); break }} }}
+  }}
+}}
+if (-not (Test-Path -LiteralPath $exe)) {{ Write-Output "프로그램을 찾지 못했다: $exe"; exit 2 }}
+$r=([ClaudyDesk.D]::LaunchHidden($exe, $argLine, '', {ms})).Split(' ')
+"숨은 화면에 실행됨: $exe (pid $($r[0]), 창 $($r[1])). 사용자 화면에는 나타나지 않는다. window_list·window_capture·window_input 으로 다룬다"
+if ($r[1] -eq '0' -and $r[2] -eq 'exited') {{ '띄운 프로세스가 창 없이 바로 끝났다. 이미 떠 있는 프로그램에 넘기는 단일 인스턴스 프로그램은 격리되지 않는다'; exit 4 }}
+elseif ($r[1] -eq '0') {{ '창이 아직 없다(GPU 를 쓰는 앱은 숨은 화면에서 창을 못 그릴 수 있다. 그때는 mode=desktop)' }}"#,
+        head = desk_head_ps(),
+        prog = ps_q(program),
+        args = ps_q(&arg_line),
+        ms = wait * 1000,
+    )
+}
+
 /// Windows browser_run 앞부분: 디버깅 포트가 닫혀 있으면 브라우저를 격리 실행으로 띄운다
-fn browser_isolate_ps(name: &str) -> String {
+fn browser_isolate_ps(name: &str, hidden: bool) -> String {
     let port = match name {
         "edge" => 9232,
         "aside" => 9233,
@@ -1306,8 +1345,9 @@ if (-not $alive) {{
   if ($bx) {{
     $prof=Join-Path $env:USERPROFILE '.claudy\browser\profiles\{name}'; New-Item -ItemType Directory -Force $prof | Out-Null
     {guard}
-    $r=([ClaudyDesk.D]::Launch($bx, "--remote-debugging-port={port} `"--user-data-dir=$prof`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion", '', 'Claudy 시험', 15000)).Split(' ')
-    [Console]::Error.WriteLine("[claudy] {name} 을 가상 데스크톱 「Claudy 시험」에 격리 실행했다(pid $($r[0]))")
+    $ba="--remote-debugging-port={port} `"--user-data-dir=$prof`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion"
+    $r=if ({hidden}) {{ ([ClaudyDesk.D]::LaunchHidden($bx, "$ba --disable-gpu", '', 15000)).Split(' ') }} else {{ ([ClaudyDesk.D]::Launch($bx, $ba, '', 'Claudy 시험', 15000)).Split(' ') }}
+    [Console]::Error.WriteLine("[claudy] {name} 을 격리 실행했다(pid $($r[0]), $(if ({hidden}) {{ '숨은 화면' }} else {{ '가상 데스크톱 「Claudy 시험」' }}))")
     for ($i=0; $i -lt 60; $i++) {{ try {{ if ((Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 1).StatusCode -eq 200) {{ break }} }} catch {{}}; Start-Sleep -Milliseconds 300 }}
   }}
   $ErrorActionPreference='Continue'
@@ -1315,6 +1355,7 @@ if (-not $alive) {{
 "#,
         head = desk_head_ps(),
         guard = DESK_GUARD_PS.replace('\n', "\n    "),
+        hidden = if hidden { "$true" } else { "$false" },
     )
 }
 
@@ -1583,6 +1624,7 @@ mod desk_tests {
         let w = |n: &str, s: String| std::fs::write(format!("{dir}/{n}.ps1"), format!("\u{feff}{s}")).unwrap();
         w("open", app_open_isolated_ps("charmap", &[], 10, "Claudy 시험"));
         w("list", format!("{}\n[ClaudyDesk.D]::ListDesktops()\n'@@JSON'\n[ClaudyDesk.D]::ListWindows(0, $false)\n'@@GUARD'\n{}", desk_head_ps(), DESK_STATUS_PS));
-        w("browser", browser_isolate_ps("chrome"));
+        w("browser", browser_isolate_ps("chrome", true));
+        w("hidden", app_open_hidden_ps("charmap", &[], 10));
     }
 }

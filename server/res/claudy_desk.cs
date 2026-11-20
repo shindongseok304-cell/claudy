@@ -348,6 +348,69 @@ namespace ClaudyDesk
             return pi.dwProcessId + " " + moved + " " + (exited ? "exited" : "running");
         }
 
+
+        // ---- 숨은 화면(별도 Win32 데스크톱 WinSta0\ClaudyHidden). 이 화면의 창은 사용자가 보는 화면(입력 데스크톱)의 전경을 가져갈 수 없다.
+        // 가상 데스크톱 격리에서 남은 「무입력 3분 뒤 화면 가져가기」를 없앤다(11.20 실측: 문자표·Chrome 실행, 값 넣기, 단추, 창 찍기 정상, 사용자 전경 변화 없음).
+        // 사용자가 Win+Tab 으로 볼 수는 없다. 화면 확인은 window_capture 로 한다. GPU 를 쓰는 앱은 이 화면에서 그리지 못할 수 있다(Chrome 은 --disable-gpu 로 정상)
+        public const string HiddenName = "ClaudyHidden";
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr CreateDesktop(string name, IntPtr dev, IntPtr dm, uint flags, uint access, IntPtr sa);
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr OpenDesktop(string name, uint flags, bool inherit, uint access);
+        [DllImport("user32.dll")] static extern bool SetThreadDesktop(IntPtr d);
+        [DllImport("user32.dll")] static extern bool EnumDesktopWindows(IntPtr d, W.EnumProc f, IntPtr l);
+        static IntPtr hiddenDesk = IntPtr.Zero;
+
+        static IntPtr Hidden(bool create)
+        {
+            if (hiddenDesk != IntPtr.Zero) return hiddenDesk;
+            IntPtr d = OpenDesktop(HiddenName, 0, false, 0x10000000);
+            if (d == IntPtr.Zero && create) { d = CreateDesktop(HiddenName, IntPtr.Zero, IntPtr.Zero, 0, 0x10000000, IntPtr.Zero); if (d != IntPtr.Zero) Log("숨은 화면 " + HiddenName + " 을 만듦"); }
+            hiddenDesk = d;
+            return d;
+        }
+
+        /// 숨은 화면의 보이는 최상위 창
+        static List<IntPtr> HiddenWindows()
+        {
+            var list = new List<IntPtr>();
+            IntPtr d = Hidden(false);
+            if (d == IntPtr.Zero) return list;
+            EnumDesktopWindows(d, delegate (IntPtr h, IntPtr l) { if (W.IsWindowVisible(h)) list.Add(h); return true; }, IntPtr.Zero);
+            return list;
+        }
+
+        public static bool IsHidden(IntPtr h)
+        {
+            IntPtr root = W.GetAncestor(h, 2); if (root == IntPtr.Zero) root = h;
+            return HiddenWindows().Contains(root);
+        }
+
+        /// 숨은 화면에 띄운다. 결과 "pid 창수 상태"
+        public static string LaunchHidden(string exe, string args, string cwd, int waitMs)
+        {
+            IntPtr d = Hidden(true);
+            if (d == IntPtr.Zero) throw new Exception("숨은 화면을 만들지 못했다 " + Marshal.GetLastWin32Error());
+            var si = new W.STARTUPINFO(); si.cb = Marshal.SizeOf(typeof(W.STARTUPINFO)); si.lpDesktop = "WinSta0\\" + HiddenName;
+            var cmd = new StringBuilder("\"" + exe + "\" " + (args ?? ""), 8192);
+            W.PROCESS_INFORMATION pi;
+            if (!W.CreateProcess(null, cmd, IntPtr.Zero, IntPtr.Zero, false, 0, IntPtr.Zero, string.IsNullOrEmpty(cwd) ? null : cwd, ref si, out pi))
+                throw new Exception("CreateProcess 실패 " + Marshal.GetLastWin32Error());
+            W.CloseHandle(pi.hThread); W.CloseHandle(pi.hProcess);
+            AddWatch(pi.dwProcessId, "@hidden");
+            Log("숨은 화면에 실행 pid " + pi.dwProcessId + " " + exe);
+            int wins = 0; bool exited = false;
+            var end = DateTime.UtcNow.AddMilliseconds(waitMs);
+            while (DateTime.UtcNow < end)
+            {
+                var procs = W.Procs(); var watched = Watched();
+                if (!procs.ContainsKey(pi.dwProcessId)) exited = true;
+                wins = 0;
+                foreach (var h in HiddenWindows()) { int wp = W.Pid(h); if (wp == pi.dwProcessId || IsolatedRoot(wp, watched, procs) != null) wins++; }
+                if (wins > 0) break;
+                Thread.Sleep(50);
+            }
+            return pi.dwProcessId + " " + wins + " " + (exited ? "exited" : "running");
+        }
+
         /// 이미 떠 있는 프로세스를 격리 대상으로 올리고 창을 옮김
         public static string Adopt(int pid, string name)
         {
@@ -365,7 +428,8 @@ namespace ClaudyDesk
             Dpi();
             var procs = W.Procs(); var watched = Watched(); var fg = W.GetForegroundWindow();
             var sb = new StringBuilder("["); bool first = true;
-            W.EnumWindows(delegate (IntPtr h, IntPtr l)
+            var hiddenSet = new HashSet<IntPtr>(HiddenWindows());
+            W.EnumProc each = delegate (IntPtr h, IntPtr l)
             {
                 if (!W.IsWindowVisible(h)) return true;
                 int pid = W.Pid(h);
@@ -374,13 +438,16 @@ namespace ClaudyDesk
                 if (!all && pidFilter <= 0 && iso == null) return true;
                 string title = W.Title(h); if (title.Length == 0 && W.GetWindow(h, 4) == IntPtr.Zero && all) return true;
                 W.RECT r; W.GetWindowRect(h, out r);
+                if (title.Length == 0 && (r.R - r.L) < 80 && (r.B - r.T) < 80) return true; // 이름 없는 작은 보조 창
                 KeyValuePair<int, string> pe; string exe = procs.TryGetValue(pid, out pe) ? pe.Value : "";
                 if (!first) sb.Append(","); first = false;
                 sb.AppendFormat("{{\"hwnd\":\"0x{0:X}\",\"pid\":{1},\"exe\":\"{2}\",\"title\":\"{3}\",\"class\":\"{4}\",\"desktop\":{5},\"isolated\":{6},\"minimized\":{7},\"owned\":{8},\"foreground\":{9},\"rect\":[{10},{11},{12},{13}]}}",
-                    (long)h, pid, Esc(exe), Esc(title), Esc(W.Cls(h)), NumberOf(h), iso != null ? "true" : "false", W.IsIconic(h) ? "true" : "false",
+                    (long)h, pid, Esc(exe), Esc(title), Esc(W.Cls(h)), hiddenSet.Contains(h) ? -2 : NumberOf(h), iso != null ? "true" : "false", W.IsIconic(h) ? "true" : "false",
                     W.GetWindow(h, 4) != IntPtr.Zero ? "true" : "false", h == fg ? "true" : "false", r.L, r.T, r.R - r.L, r.B - r.T);
                 return true;
-            }, IntPtr.Zero);
+            };
+            W.EnumWindows(each, IntPtr.Zero);
+            foreach (var h in hiddenSet) each(h, IntPtr.Zero);
             return sb.Append("]").ToString();
         }
 
@@ -389,6 +456,20 @@ namespace ClaudyDesk
         {
             Dpi();
             if (!W.IsWindow(h)) throw new Exception("창 없음");
+            if (IsHidden(h))
+            {
+                string res = null; Exception err = null; IntPtr d = Hidden(false);
+                var th = new Thread(delegate () { try { SetThreadDesktop(d); res = CaptureCore(h, path, maxWidth, false); } catch (Exception e) { err = e; } });
+                th.Start(); th.Join();
+                if (err != null) throw err;
+                return res;
+            }
+            return CaptureCore(h, path, maxWidth, true);
+        }
+
+        static string CaptureCore(IntPtr h, string path, int maxWidth, bool virtualDesk)
+        {
+            Dpi();
             bool wasMin = W.IsIconic(h);
             if (wasMin) { W.ShowWindowAsync(h, 4); Thread.Sleep(300); } // SW_SHOWNOACTIVATE. 최소화 창은 그림이 없으므로 비활성으로 펼침
             try
@@ -414,7 +495,7 @@ namespace ClaudyDesk
                     return dw + " " + dh + " " + (total > 0 ? dark * 100 / total : 0);
                 }
             }
-            finally { if (wasMin && NumberOf(h) == Current()) W.ShowWindowAsync(h, 7); } // 사용자가 보는 데스크톱의 창만 다시 최소화
+            finally { if (wasMin && virtualDesk && NumberOf(h) == Current()) W.ShowWindowAsync(h, 7); } // 사용자가 보는 데스크톱의 창만 다시 최소화
         }
 
 
@@ -432,7 +513,8 @@ namespace ClaudyDesk
 
         [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
         /// 좌표를 모두 실제 픽셀로 받는다. PowerShell 은 DPI 비인식이라 최상위 창 좌표만 배율이 적용된 값으로 와서 자식 창 좌표와 어긋났다(11.20 실측)
-        public static void Dpi() { try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { } }
+        /// 숨은 화면의 창 핸들은 그 화면을 연 프로세스에서만 유효하다(열기 전에는 IsWindow 가 false, 11.20 실측). 그래서 진입할 때마다 연다
+        public static void Dpi() { try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { } try { Hidden(false); } catch { } }
 
         [DllImport("user32.dll")] static extern bool LockSetForegroundWindow(uint code);
 
@@ -442,6 +524,7 @@ namespace ClaudyDesk
             LockSetForegroundWindow(1); // 보내는 메시지로 대상이 전경을 가져가지 못하게(사용자 클릭·Alt 로 저절로 풀림)
             if (!W.IsWindow(h)) throw new Exception("창 없음");
             IntPtr root = W.GetAncestor(h, 2); if (root == IntPtr.Zero) root = h;
+            if (IsHidden(root)) { if (W.IsIconic(root)) { W.ShowWindowAsync(root, 4); Thread.Sleep(300); } return root; }
             int n = NumberOf(root), cur = Current();
             if (n == cur || n == 0) throw new Exception("사용자가 보는 데스크톱(또는 모든 데스크톱에 고정)의 창이라 보내지 않는다. 격리 실행한 창에만 쓴다");
             if (W.IsIconic(root)) { W.ShowWindowAsync(root, 4); Thread.Sleep(300); } // 숨은 데스크톱에서 비활성으로 펼침
@@ -679,7 +762,7 @@ namespace ClaudyDesk
         {
             try
             {
-                if (NumberOf(root) == Current()) return;
+                if (IsHidden(root) || NumberOf(root) == Current()) return;
                 IntPtr dc = GetWindowDC(root);
                 if (dc == IntPtr.Zero) return;
                 using (var g = Graphics.FromHdc(dc))
@@ -729,7 +812,7 @@ namespace ClaudyDesk
             int pid = W.Pid(h);
             string name = IsolatedRoot(pid, gWatched, gProcs);
             if (name == null && !gProcs.ContainsKey(pid)) { gProcs = W.Procs(); name = IsolatedRoot(pid, gWatched, gProcs); }
-            if (name == null) return;
+            if (name == null || name == "@hidden") return;
             int n = Ensure(name);
             if (NumberOf(h) != n && Move(h, n)) { Moved++; Log("새 창을 「" + name + "」 로 옮김 pid " + pid + " " + W.Title(h)); }
             Unfold(h, n);
@@ -740,6 +823,7 @@ namespace ClaudyDesk
             int pid = W.Pid(h);
             string name = IsolatedRoot(pid, gWatched, gProcs);
             if (name == null && !gProcs.ContainsKey(pid)) { gProcs = W.Procs(); name = IsolatedRoot(pid, gWatched, gProcs); }
+            if (name == "@hidden") return; // 숨은 화면의 창은 사용자 화면의 전경이 될 수 없다
             if (name == null)
             {
                 // 모든 데스크톱에 고정된 창(사이드 패널 등, 번호 0)과 격리 데스크톱 전환 직후의 사건은 「사용자가 보던 데스크톱」을 바꾸지 않는다.
