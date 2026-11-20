@@ -29,7 +29,7 @@ claude_ask 는 호출마다 Claude Code 를 새로 띄워 수십 초와 별도 �
 호스트 사이 파일 복사는 file_copy 를 쓴다(scp 를 직접 짜지 않는다). Windows 호스트의 Claudy 갱신은 claudy_update 를 쓴다. \
 창이 있는 프로그램은 app_open 으로 띄운다(원격 호스트에서 run_command 로 띄운 창은 화면에 보이지 않는다). \
 Windows 에서 개발·시험용으로 띄우는 프로그램과 브라우저는 사용자의 화면·마우스·키보드를 빼앗지 않도록 기본으로 가상 데스크톱 「Claudy 시험」에 격리한다(app_open·browser_run 의 isolate). \
-격리한 창은 window_list 로 찾고 window_capture 로 본다. 사용자 화면 전체를 찍는 screen_capture 는 사용자가 요청할 때만 쓴다. \
+격리한 창은 window_list 로 찾고 window_capture 로 보며 window_input 으로 조작한다(단추·입력란 이름으로 누르기·값 넣기가 먼저, 좌표 클릭은 다음). 사용자 화면 전체를 찍는 screen_capture 는 사용자가 요청할 때만 쓴다. \
 COM 등으로 따로 뜬 시험 프로그램은 window_isolate 로 격리 대상에 올린다. 실제 마우스·키보드 입력(SendInput, SetCursorPos)과 SetForegroundWindow 를 쓰는 스크립트는 짜지 않는다. \
 한글(HWPFrame.HwpObject) 자동화 스크립트는 객체를 만든 직후 반드시 RegisterModule(\"FilePathCheckDLL\", \"FilePathCheckerModule\") 을 부른다. 빠뜨리면 파일을 열 때마다 「접근 허용」 창이 떠서 작업이 멈춘다.";
 const INSTRUCTIONS: &str = INSTRUCTIONS_BASE;
@@ -213,6 +213,34 @@ pub struct WindowCaptureParams {
     pub hwnd: String,
     /// 그림 가로 최대 픽셀. 기본 1600
     pub max_width: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WindowInputParams {
+    /// 호스트 이름 (hosts_list 로 확인)
+    pub host: String,
+    /// 창 핸들(window_list 의 hwnd). 격리한 창(사용자가 보지 않는 가상 데스크톱의 창)만 된다
+    pub hwnd: String,
+    /// elements(UI 요소 목록), invoke(이름으로 누르기), set_text(값 넣기), click, double_click, right_click, type(글자 입력), key(키 입력), scroll
+    pub action: String,
+    /// 창 왼쪽 위 기준 x 픽셀(window_capture 원본 크기 기준, elements 의 위치와 같은 기준)
+    pub x: Option<i32>,
+    /// 창 왼쪽 위 기준 y 픽셀
+    pub y: Option<i32>,
+    /// invoke·set_text: 요소 이름(elements 에 보인 「」 안의 이름, & 단축키 표시는 빼고). 정확히 같은 이름이 없으면 포함하는 이름. set_text 는 입력란 앞 이름표 이름도 된다
+    pub name: Option<String>,
+    /// 같은 이름 요소가 여럿일 때 몇 번째(0부터). 기본 0
+    pub index: Option<u32>,
+    /// type·set_text: 넣을 글자
+    pub text: Option<String>,
+    /// key: enter, tab, esc, space, backspace, delete, up, down, left, right, home, end, pageup, pagedown, f1~f12, 글자 하나, alt+글자
+    pub key: Option<String>,
+    /// scroll: 휠 칸 수. 양수는 위, 음수는 아래. 기본 -3
+    pub notches: Option<i32>,
+    /// elements: 최대 요소 수. 기본 150
+    pub max: Option<u32>,
+    /// 대상 창 위에 주황색 가상 포인터를 잠깐 그린다. 기본 true
+    pub pointer: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -668,6 +696,72 @@ impl Claudy {
             Content::text(format!("{} 창 0x{hwnd:X} {wid}x{hgt} 검은 비율 {dark}% {}{warn}", p.host, local.display())),
             Content::image(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes), "image/png"),
         ])
+    }
+
+    #[tool(description = "격리한 Windows 창(사용자가 보지 않는 가상 데스크톱의 창)을 조작한다. 실제 마우스·키보드는 쓰지 않고 그 창과 자식 창(단추·입력란)에 Windows 메시지를 보낸다(Claude in Chrome 이 페이지 안에 입력을 넣는 것과 같은 원리). 사용자가 보는 데스크톱의 창은 거부한다. 순서: window_list 로 hwnd → action=elements 로 단추·입력란 이름과 위치 → invoke(이름으로 누르기)·set_text(값 넣기)를 먼저 쓰고, 자식 창이 없는 앱(WPF·Chromium·egui)은 click·type·key·scroll 좌표 방식. Office 는 COM, 브라우저는 browser_run(CDP)이 더 확실하다. 결과는 window_capture 로 확인. ctrl·shift 조합 키는 보낼 수 없다.")]
+    async fn window_input(&self, Parameters(p): Parameters<WindowInputParams>) -> CallToolResult {
+        let host = match desk_host(&p.host) {
+            Ok(h) => h,
+            Err(e) => return err_text(e),
+        };
+        let Some(hwnd) = parse_hwnd(&p.hwnd) else {
+            return err_text(format!("hwnd 형식이 아니다: {} (예 0x1A2B3C)", p.hwnd));
+        };
+        let b64 = |t: &str| format!("([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')))", util::b64(t));
+        let (x, y) = (p.x.unwrap_or(-1), p.y.unwrap_or(-1));
+        let ptr = if p.pointer.unwrap_or(true) { "$true" } else { "$false" };
+        let h = format!("([IntPtr][int64]{hwnd})");
+        let need_xy = |a: &str| -> Result<(), String> { if x < 0 || y < 0 { Err(format!("{a} 은 x, y 가 필요하다")) } else { Ok(()) } };
+        let action = p.action.trim().to_lowercase();
+        let call = match action.as_str() {
+            "elements" => format!("[ClaudyDesk.D]::Elements({h}, {})", p.max.unwrap_or(150).clamp(10, 1000)),
+            "invoke" => match &p.name {
+                Some(n) if !n.trim().is_empty() => format!("[ClaudyDesk.D]::Invoke({h}, {}, {}, {ptr})", b64(n.trim()), p.index.unwrap_or(0)),
+                _ => return err_text("invoke 는 name 이 필요하다".into()),
+            },
+            "set_text" => {
+                let Some(t) = &p.text else { return err_text("set_text 는 text 가 필요하다".into()) };
+                let name = p.name.as_deref().map(str::trim).unwrap_or("");
+                if name.is_empty() && (x < 0 || y < 0) {
+                    return err_text("set_text 는 name 또는 x, y 가 필요하다".into());
+                }
+                format!("[ClaudyDesk.D]::SetText({h}, {}, {}, {x}, {y}, {})", b64(name), p.index.unwrap_or(0), b64(t))
+            }
+            "click" | "double_click" | "right_click" => {
+                if let Err(e) = need_xy(&action) {
+                    return err_text(e);
+                }
+                let (btn, n) = match action.as_str() {
+                    "double_click" => ("left", 2),
+                    "right_click" => ("right", 1),
+                    _ => ("left", 1),
+                };
+                format!("[ClaudyDesk.D]::Click({h}, {x}, {y}, '{btn}', {n}, {ptr})")
+            }
+            "type" => match &p.text {
+                Some(t) => format!("[ClaudyDesk.D]::TypeText({h}, {x}, {y}, {})", b64(t)),
+                None => return err_text("type 은 text 가 필요하다".into()),
+            },
+            "key" => match &p.key {
+                Some(k) => format!("[ClaudyDesk.D]::SendKey({h}, {x}, {y}, {})", b64(k)),
+                None => return err_text("key 는 key 가 필요하다".into()),
+            },
+            "scroll" => {
+                if let Err(e) = need_xy("scroll") {
+                    return err_text(e);
+                }
+                format!("[ClaudyDesk.D]::Scroll({h}, {x}, {y}, {}, {ptr})", p.notches.unwrap_or(-3))
+            }
+            other => return err_text(format!("알 수 없는 action: {other}")),
+        };
+        let body = format!("{}\ntry {{ {call} }} catch {{ [Console]::Error.WriteLine($_.Exception.InnerException.Message + $_.Exception.Message); exit 3 }}", desk_head_ps());
+        match run_simple(&host, &body, 60).await {
+            Ok(out) => {
+                log_audit("window_input", &p.host, &format!("0x{hwnd:X} {action}"), Some(0), 0, false);
+                ok_text(format!("[{}] {}", p.host, out.trim()))
+            }
+            Err(e) => err_text(format!("[{}] {action} 실패: {e}", p.host)),
+        }
     }
 
     #[tool(description = "Windows 호스트에서 이미 떠 있는 프로그램(COM 으로 뜬 Excel·한글 등)을 격리 대상에 올린다. 그 프로그램의 창을 시험용 가상 데스크톱으로 옮기고, 이후 새 창과 전경 가져가기도 감시기가 막는다.")]
