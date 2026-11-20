@@ -296,15 +296,38 @@ namespace ClaudyDesk
         public static string Launch(string exe, string args, string cwd, string name, int waitMs)
         {
             int n = Ensure(name);
-            var si = new W.STARTUPINFO(); si.cb = Marshal.SizeOf(typeof(W.STARTUPINFO));
-            si.dwFlags = 1; si.wShowWindow = 7; // SW_SHOWMINNOACTIVE
-            var cmd = new StringBuilder("\"" + exe + "\" " + (args ?? ""), 8192);
-            W.PROCESS_INFORMATION pi;
-            if (!W.CreateProcess(null, cmd, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, string.IsNullOrEmpty(cwd) ? null : cwd, ref si, out pi))
-                throw new Exception("CreateProcess 실패 " + Marshal.GetLastWin32Error());
-            W.CloseHandle(pi.hThread); W.CloseHandle(pi.hProcess);
+            // 전경 권한을 물려주지 않도록 WMI(Win32_Process.Create)로 띄우고, 띄우기 직전 전경 바꾸기를 잠근다(Inside 시험 11.19 실측 방식).
+            // WMI 가 안 되면 CreateProcess 로 띄운다
+            LockSetForegroundWindow(1);
+            W.PROCESS_INFORMATION pi = new W.PROCESS_INFORMATION();
+            string cmdLine = "\"" + exe + "\" " + (args ?? "");
+            string via = "WMI";
+            try
+            {
+                var cls = new System.Management.ManagementClass("Win32_Process");
+                var su = new System.Management.ManagementClass("Win32_ProcessStartup").CreateInstance();
+                su["ShowWindow"] = (ushort)7; // SW_SHOWMINNOACTIVE
+                var inP = cls.GetMethodParameters("Create");
+                inP["CommandLine"] = cmdLine;
+                if (!string.IsNullOrEmpty(cwd)) inP["CurrentDirectory"] = cwd;
+                inP["ProcessStartupInformation"] = su;
+                var outP = cls.InvokeMethod("Create", inP, null);
+                uint rv = (uint)outP["ReturnValue"];
+                if (rv != 0) throw new Exception("WMI 반환 " + rv);
+                pi.dwProcessId = (int)(uint)outP["ProcessId"];
+            }
+            catch (Exception)
+            {
+                via = "CreateProcess";
+                var si = new W.STARTUPINFO(); si.cb = Marshal.SizeOf(typeof(W.STARTUPINFO));
+                si.dwFlags = 1; si.wShowWindow = 7;
+                var cmd = new StringBuilder(cmdLine, 8192);
+                if (!W.CreateProcess(null, cmd, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, string.IsNullOrEmpty(cwd) ? null : cwd, ref si, out pi))
+                    throw new Exception("CreateProcess 실패 " + Marshal.GetLastWin32Error());
+                W.CloseHandle(pi.hThread); W.CloseHandle(pi.hProcess);
+            }
             AddWatch(pi.dwProcessId, name);
-            Log("격리 실행 pid " + pi.dwProcessId + " 「" + name + "」 " + exe);
+            Log("격리 실행 pid " + pi.dwProcessId + " 「" + name + "」 " + exe + " (" + via + ")");
             int moved = 0; var done = new HashSet<long>(); bool exited = false;
             var end = DateTime.UtcNow.AddMilliseconds(waitMs);
             while (DateTime.UtcNow < end)
@@ -411,9 +434,12 @@ namespace ClaudyDesk
         /// 좌표를 모두 실제 픽셀로 받는다. PowerShell 은 DPI 비인식이라 최상위 창 좌표만 배율이 적용된 값으로 와서 자식 창 좌표와 어긋났다(11.20 실측)
         public static void Dpi() { try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { } }
 
+        [DllImport("user32.dll")] static extern bool LockSetForegroundWindow(uint code);
+
         static IntPtr Guarded(IntPtr h)
         {
             Dpi();
+            LockSetForegroundWindow(1); // 보내는 메시지로 대상이 전경을 가져가지 못하게(사용자 클릭·Alt 로 저절로 풀림)
             if (!W.IsWindow(h)) throw new Exception("창 없음");
             IntPtr root = W.GetAncestor(h, 2); if (root == IntPtr.Zero) root = h;
             int n = NumberOf(root), cur = Current();

@@ -1181,7 +1181,7 @@ $dll=Join-Path $T 'ClaudyDesk-{hash:08x}.dll'
 if (-not ('ClaudyDesk.D' -as [type])) {{
   if (-not (Test-Path $dll)) {{
     $src=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}'))
-    Add-Type -TypeDefinition $src -ReferencedAssemblies System.Drawing -OutputAssembly $dll -OutputType Library
+    Add-Type -TypeDefinition $src -ReferencedAssemblies System.Drawing,System.Management -OutputAssembly $dll -OutputType Library
     Get-ChildItem $T -Filter 'ClaudyDesk-*.dll' | Where-Object {{ $_.FullName -ne $dll }} | Remove-Item -ErrorAction SilentlyContinue
   }}
   Add-Type -Path $dll
