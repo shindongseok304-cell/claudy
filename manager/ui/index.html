@@ -271,11 +271,12 @@ window.__demo=(function(){
     },
     'jobs.list':()=>({rows:D.jobs.map(j=>({id:j.id,host:j.host,kind:j.kind,started:j.started,state:j.state,label:j.label,code:j.code}))}),
     'jobs.log':a=>({text:(D.jobs.find(j=>j.id===a.id)||{log:''}).log}),
-    'app.info':()=>({version:'0.6.8',dataDir:'C:\\Users\\user\\.claudy',hostsFile:'C:\\Users\\user\\.claudy\\hosts.toml'}),
+    'app.info':()=>({version:'0.6.9',dataDir:'C:\\Users\\user\\.claudy',hostsFile:'C:\\Users\\user\\.claudy\\hosts.toml'}),
     'app.status':()=>({running:!q.includes('off'),hosts:D.hosts.length}),
     'behavior.get':()=>clone(D.beh),
     'behavior.set':a=>{Object.assign(D.beh,a);return clone(D.beh)},
-    'automation.status':()=>({windows:!/Mac/.test(navigator.platform||''),hwpGuard:D.beh.hwpGuard!==false,hwpLog:['2026-11-17 13:03:05 접근 허용 창 자동 승인(모두 허용) C:\\work\\a.hwpx'],deskReady:true,deskRuns:12,tunnelLog:['2026-11-17 09:01:31 터널 시작: tun@example.com:22','2026-11-17 09:01:32 ssh 실행']}),
+    'isolation.close_all':()=>({closed:1}),
+    'automation.status':()=>({windows:!/Mac/.test(navigator.platform||''),iso:{guard:true,procs:[{pid:4120,exe:'charmap.exe',mode:'숨은 화면'}]},isoLog:['2026-11-20 17:47:54 숨은 화면에 실행 pid 4120 C:\\WINDOWS\\system32\\charmap.exe'],hwpGuard:D.beh.hwpGuard!==false,hwpLog:['2026-11-17 13:03:05 접근 허용 창 자동 승인(모두 허용) C:\\work\\a.hwpx'],deskReady:true,deskRuns:12,tunnelLog:['2026-11-17 09:01:31 터널 시작: tun@example.com:22','2026-11-17 09:01:32 ssh 실행']}),
     'tunnel.status':()=>({state:D.beh.tunnel?'연결됨':'꺼짐',error:'',target:D.beh.tunnel?'tun@example.com:22 → 127.0.0.1:'+(D.beh.tunnelPort||22022):null}),
     'pick.file':a=>/exe/.test(a.filter||'')?'C:\\Users\\user\\AppData\\Roaming\\npm\\claude.cmd':'C:\\Users\\user\\.ssh\\id_rsa',
     'pick.folder':()=>'C:\\Users\\user\\projects'
@@ -468,7 +469,14 @@ function autoCard(){
   const A=S.auto;if(!A||!A.windows)return '';
   const desk=A.deskReady?'<span class="bd"><i class="dot ok"></i>대기 중'+(A.deskRuns?' · '+A.deskRuns+'건 처리':'')+'</span>':'<span class="bd"><i class="dot fail"></i>꺼짐</span>';
   const log=(A.hwpLog||[]).slice().reverse().join('\n')||'자동 승인한 기록이 없습니다';
-  return grp('한글 자동화',card(row('「접근 허용」 창 자동 승인','한글이 띄운 보안 확인 창에만 「모두 허용」을 누릅니다',tg('hwpGuard',A.hwpGuard))+
+  const I=A.iso||{procs:[]};
+  const plist=(I.procs||[]).map(p=>esc(p.exe)+' (pid '+p.pid+', '+esc(p.mode)+')').join('\n')||'격리 실행 중인 프로그램이 없습니다';
+  const isoCard=grp('시험 격리',card(
+    row('감시기','시험 프로그램의 새 창과 화면 가져가기를 막습니다(가상 데스크톱 방식)',I.guard?'<span class="bd"><i class="dot ok"></i>실행 중</span>':'<span class="bd"><i class="dot"></i>꺼짐</span>')+
+    row('격리 실행 중','숨은 화면의 프로그램은 화면에 보이지 않습니다',(I.procs||[]).length+'개 '+((I.procs||[]).length?'<button class="btn" data-a="isoClose">모두 닫기</button>':''))+
+    '<div class="row startup"><div class="logbox">'+plist+'</div></div>'),'Claude 가 시험용으로 띄운 프로그램입니다. 「모두 닫기」는 저장하지 않은 작업까지 닫습니다')+
+    grp('격리 기록',card('<div class="logbox">'+esc((A.isoLog||[]).slice().reverse().join('\n')||'기록이 없습니다')+'</div>'));
+  return isoCard+grp('한글 자동화',card(row('「접근 허용」 창 자동 승인','한글이 띄운 보안 확인 창에만 「모두 허용」을 누릅니다',tg('hwpGuard',A.hwpGuard))+
     row('원격 명령 화면 실행','다른 PC 의 Claudy 명령을 이 PC 화면 세션에서 바로 실행합니다',desk)),'기록은 사용자 폴더의 .claudy\\hwpguard.log 에 남습니다')+
     grp('자동 승인 기록',card('<div class="logbox">'+esc(log)+'</div>'));
 }
@@ -711,6 +719,7 @@ document.addEventListener('click',async e=>{
      else if(k==='desktop'){const F=S.F;await doSave();const hh=S.hosts.find(x=>x.name===F.orig);if(!hh)break;const r=await call('hosts.save',{original:hh.name,host:{desktop:!hh.desktop}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
      else if(k==='tunnel'){const v=!S.beh.tunnel;try{S.beh=await call('behavior.set',{tunnel:v})}catch(err){S.tunErr=err.message}render(true);flash();setTimeout(loadTunnel,1500);setTimeout(loadTunnel,7000)}
      else if(k==='autoKey'){const s=selHost(true);if(!s.h)break;const r=await call('hosts.save',{original:s.h.name,host:{accept_new_host_key:!s.h.accept_new_host_key}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
+     else if(k==='isoClose'){if(confirm('격리 실행 중인 프로그램을 모두 닫습니다. 저장하지 않은 작업은 사라집니다.')){try{await call('isolation.close_all')}catch(err){}await loadTunnel();render(true);flash()}}
      else if(k==='hwpGuard'){const v=!(S.auto&&S.auto.hwpGuard);S.auto.hwpGuard=v;render(true);S.beh=await call('behavior.set',{hwpGuard:v});await loadTunnel();flash()}
      else{const v=!S.beh[k];S.beh[k]=v;render(true);const o={};o[k]=v;S.beh=await call('behavior.set',o);render(true);flash()}
      break}

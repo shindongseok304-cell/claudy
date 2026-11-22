@@ -20,3 +20,23 @@ jobs:
         run: cd server && cargo test --release
       - name: 설정 앱 시험
         run: cd manager && cargo test --release
+  windows-helper:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 격리 도우미 컴파일
+        shell: powershell
+        run: |
+          $src = Get-Content -Raw -Encoding UTF8 server/res/claudy_desk.cs
+          Add-Type -TypeDefinition $src -ReferencedAssemblies System.Drawing,System.Management -OutputAssembly "$env:RUNNER_TEMP\ClaudyDesk.dll" -OutputType Library
+          Add-Type -Path "$env:RUNNER_TEMP\ClaudyDesk.dll"
+          "컴파일 완료"
+      - name: 숨은 화면 동작 확인
+        continue-on-error: true
+        shell: powershell
+        run: |
+          Add-Type -Path "$env:RUNNER_TEMP\ClaudyDesk.dll"
+          [ClaudyDesk.D]::LaunchHidden("$env:windir\system32\notepad.exe", "", "", 5000)
+          Start-Sleep 2
+          [ClaudyDesk.D]::ListWindows(0, $false)
+          [ClaudyDesk.D]::CloseIsolated(0, $true, 3000)

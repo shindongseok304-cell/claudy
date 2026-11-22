@@ -411,6 +411,55 @@ namespace ClaudyDesk
             return pi.dwProcessId + " " + wins + " " + (exited ? "exited" : "running");
         }
 
+
+        /// 격리 실행한 프로그램 닫기. pid 가 0 이면 격리 대상 전부(자손 포함). 창에 WM_CLOSE 를 보내 정상 종료를 기다리고,
+        /// force 면 남은 프로세스를 강제 종료한다. 숨은 화면에 남은 프로그램은 사용자가 볼 수 없어 이 기능으로 정리한다
+        public static string CloseIsolated(int pid, bool force, int waitMs)
+        {
+            Dpi();
+            var procs = W.Procs(); var watched = Watched();
+            var targets = new List<int>();
+            foreach (var kv in procs)
+            {
+                int p = kv.Key;
+                bool mine = pid > 0 ? (p == pid || IsDescendant(p, pid, procs)) : IsolatedRoot(p, watched, procs) != null;
+                if (mine) targets.Add(p);
+            }
+            if (targets.Count == 0) return "닫을 격리 프로그램이 없다";
+            var tset = new HashSet<int>(targets); int posted = 0;
+            var wins = new List<IntPtr>();
+            W.EnumWindows(delegate (IntPtr h, IntPtr l) { if (W.IsWindowVisible(h) && W.GetWindow(h, 4) == IntPtr.Zero) wins.Add(h); return true; }, IntPtr.Zero);
+            wins.AddRange(HiddenWindows());
+            foreach (var h in wins) if (tset.Contains(W.Pid(h)) && W.GetWindow(h, 4) == IntPtr.Zero) { PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero); posted++; }
+            var end = DateTime.UtcNow.AddMilliseconds(waitMs);
+            while (DateTime.UtcNow < end)
+            {
+                var now = W.Procs(); bool any = false;
+                foreach (var p in targets) if (now.ContainsKey(p)) { any = true; break; }
+                if (!any) break;
+                Thread.Sleep(200);
+            }
+            var left = new List<string>(); int killed = 0;
+            var after = W.Procs();
+            foreach (var p in targets)
+            {
+                if (!after.ContainsKey(p)) continue;
+                KeyValuePair<int, string> e; string exe = after.TryGetValue(p, out e) ? e.Value : "?";
+                if (force) { try { Process.GetProcessById(p).Kill(); killed++; continue; } catch { } }
+                left.Add(exe + "(" + p + ")");
+            }
+            Log("격리 프로그램 닫기: 대상 " + targets.Count + ", 닫기 요청 창 " + posted + ", 강제 종료 " + killed + ", 남음 " + left.Count);
+            string r = string.Format("대상 프로세스 {0}개, 닫기 요청한 창 {1}개, 강제 종료 {2}개", targets.Count, posted, killed);
+            if (left.Count > 0) r += "\n안 닫힌 프로세스: " + string.Join(", ", left.ToArray()) + "\n저장 확인 같은 대화 상자가 떠 있을 수 있다. window_capture 로 확인하거나 force=true 로 강제 종료한다";
+            return r;
+        }
+
+        static bool IsDescendant(int p, int root, Dictionary<int, KeyValuePair<int, string>> procs)
+        {
+            for (int d = 0; d < 6 && p > 4; d++) { KeyValuePair<int, string> e; if (!procs.TryGetValue(p, out e)) return false; p = e.Key; if (p == root) return true; }
+            return false;
+        }
+
         /// 이미 떠 있는 프로세스를 격리 대상으로 올리고 창을 옮김
         public static string Adopt(int pid, string name)
         {

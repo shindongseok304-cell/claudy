@@ -15,7 +15,7 @@ Claudy 는 PuTTY 같은 SSH 접속 프로그램의 역할을 Claude 채팅에서
 | `server/` | MCP 서버(Rust, rmcp). 실행 파일 하나 |
 | `manager/` | 설정 앱(Rust, tao·wry). Windows WebView2, macOS WKWebView, Linux WebKitGTK |
 
-## 도구 (서버 0.1.31, 17종)
+## 도구 (서버 0.1.32, 18종)
 
 | 도구 | 기능 |
 |---|---|
@@ -27,12 +27,13 @@ Claudy 는 PuTTY 같은 SSH 접속 프로그램의 역할을 Claude 채팅에서
 | `app_open` | 창이 있는 프로그램 실행. Windows 는 시험용 가상 데스크톱에 최소화·비활성으로 격리 실행(기본) |
 | `screen_capture` | 호스트의 사용자 화면 찍기 |
 | `host_status` | 호스트의 Claudy 판, 터널·갱신 기록 |
-| `claudy_update` | Windows 호스트의 Claudy 원격 갱신 |
+| `claudy_update` | Claudy 갱신. 판 번호를 주면 GitHub 릴리스를 받아 Mac 은 이 서버를, Windows 는 원격 호스트를 갱신 |
 | `ego_run` | ego 브라우저 스크립트 실행 |
-| `browser_run` | Chrome·Edge·Aside 를 조작용 프로필로 띄우고 Playwright(CDP)로 조작. Windows 는 시험용 가상 데스크톱에 격리 |
+| `browser_run` | Chrome·Edge·Aside 를 조작용 프로필로 띄우고 Playwright(CDP)로 조작. Windows 는 숨은 화면에 격리(기본). 로그인이 필요하면 mode=visible 로 다시 띄우고 끝나면 숨은 화면으로 되돌림 |
 | `window_list` | Windows 가상 데스크톱과 창 목록, 격리 감시기 상태 |
 | `window_capture` | Windows 창 하나 찍기(숨은 가상 데스크톱의 창 포함) |
 | `window_input` | 격리한 Windows 창 조작. 단추 이름으로 누르기, 입력란 값 넣기, 클릭·글자·키·휠을 그 창에 메시지로 전달 |
+| `window_close` | 격리 실행한 Windows 프로그램 닫기(pid 하나 또는 전부) |
 | `window_isolate` | 이미 떠 있는 Windows 프로그램을 격리 대상으로 |
 
 ## 설정 파일

@@ -30,7 +30,7 @@ claude_ask 는 호출마다 Claude Code 를 새로 띄워 수십 초와 별도 �
 창이 있는 프로그램은 app_open 으로 띄운다(원격 호스트에서 run_command 로 띄운 창은 화면에 보이지 않는다). \
 Windows 에서 개발·시험용으로 띄우는 프로그램과 브라우저는 사용자의 화면·마우스·키보드를 빼앗지 않도록 기본으로 격리한다(app_open·browser_run 의 isolate). 기본 mode=hidden 은 별도 숨은 화면이라 사용자 화면을 가져갈 수 없고, GPU 앱이 그리지 못하면 mode=desktop(가상 데스크톱 「Claudy 시험」). \
 격리한 창은 window_list 로 찾고 window_capture 로 보며 window_input 으로 조작한다(단추·입력란 이름으로 누르기·값 넣기가 먼저, 좌표 클릭은 다음). 사용자 화면 전체를 찍는 screen_capture 는 사용자가 요청할 때만 쓴다. \
-COM 등으로 따로 뜬 시험 프로그램은 window_isolate 로 격리 대상에 올린다. 실제 마우스·키보드 입력(SendInput, SetCursorPos)과 SetForegroundWindow 를 쓰는 스크립트는 짜지 않는다. \
+COM 등으로 따로 뜬 시험 프로그램은 window_isolate 로 격리 대상에 올리고, 시험이 끝나면 window_close 로 격리 프로그램을 닫는다(숨은 화면의 프로그램은 사용자가 볼 수 없다). 실제 마우스·키보드 입력(SendInput, SetCursorPos)과 SetForegroundWindow 를 쓰는 스크립트는 짜지 않는다. \
 한글(HWPFrame.HwpObject) 자동화 스크립트는 객체를 만든 직후 반드시 RegisterModule(\"FilePathCheckDLL\", \"FilePathCheckerModule\") 을 부른다. 빠뜨리면 파일을 열 때마다 「접근 허용」 창이 떠서 작업이 멈춘다.";
 const INSTRUCTIONS: &str = INSTRUCTIONS_BASE;
 
@@ -161,6 +161,20 @@ pub struct ClaudyUpdateParams {
     pub manifest_file: Option<String>,
     /// 이 PC 에 있는 새 설정 앱(ClaudyManager.exe) 경로
     pub manager_file: Option<String>,
+    /// 파일 대신 공개 저장소 릴리스 판(예 0.1.32, latest)을 받아 갱신한다. host 가 이 PC(macOS)면 서버를 로컬 서명해 교체하고, Windows 원격이면 받은 서버·manifest(manager=true 면 설정 앱도)를 보낸다
+    pub version: Option<String>,
+    /// version 으로 Windows 를 갱신할 때 설정 앱도 함께. 기본 false
+    pub manager: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WindowCloseParams {
+    /// 호스트 이름 (hosts_list 로 확인)
+    pub host: String,
+    /// 이 프로세스(와 자식)만 닫는다. 비우면 격리 실행한 프로그램 전부
+    pub pid: Option<u32>,
+    /// 정상 종료를 기다린 뒤에도 남은 프로세스를 강제 종료한다. 기본 false(저장 안 된 작업이 사라질 수 있음)
+    pub force: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -267,8 +281,10 @@ pub struct BrowserRunParams {
     pub guide: Option<bool>,
     /// Windows: 브라우저를 새로 띄울 때 격리한다. 기본 true(숨은 화면, GPU 끔)
     pub isolate: Option<bool>,
-    /// Windows 격리 방식. hidden(기본, 숨은 화면) 또는 desktop(가상 데스크톱 「Claudy 시험」)
+    /// Windows 격리 방식. hidden(기본, 숨은 화면), desktop(가상 데스크톱 「Claudy 시험」), visible(사용자 화면에 보통 창으로. 2단계 인증처럼 사용자가 직접 로그인할 때)
     pub mode: Option<String>,
+    /// 이미 떠 있는 조작용 브라우저를 닫고 mode 대로 다시 띄운다. 숨은 화면 브라우저를 사용자에게 보여 로그인시키거나, 로그인 뒤 다시 숨길 때. 기본 false
+    pub relaunch: Option<bool>,
     /// 제한 시간(초). 기본 90, 최대 900
     pub timeout_sec: Option<u64>,
 }
@@ -480,8 +496,30 @@ impl Claudy {
             Ok(h) => h.clone(),
             Err(e) => return err_text(e),
         };
+        let mut p = p;
+        if let Some(v) = p.version.clone().filter(|v| !v.trim().is_empty()) {
+            if host.kind != "ssh" {
+                return match self_update_mac(v.trim()).await {
+                    Ok(t) => ok_text(t),
+                    Err(e) => err_text(e),
+                };
+            }
+            if !host.remote_windows() {
+                return err_text("version 갱신은 이 PC(macOS) 또는 Windows 원격 호스트만 된다".into());
+            }
+            match fetch_windows_release(v.trim()).await {
+                Ok((srv, man, mgr)) => {
+                    p.server_file = Some(srv);
+                    p.manifest_file = Some(man);
+                    if p.manager.unwrap_or(false) {
+                        p.manager_file = Some(mgr);
+                    }
+                }
+                Err(e) => return err_text(e),
+            }
+        }
         if !host.remote_windows() {
-            return err_text("Windows 원격 호스트(shell = powershell 인 ssh 호스트)만 갱신한다. macOS 는 .mcpb 설치 창으로 갱신한다".into());
+            return err_text("Windows 원격 호스트(shell = powershell 인 ssh 호스트)만 파일로 갱신한다. 이 PC(macOS)는 version 을 준다".into());
         }
         let this_pc = match ctx.cfg.hosts.iter().find(|h| h.kind != "ssh") {
             Some(h) => h.clone(),
@@ -773,6 +811,27 @@ impl Claudy {
         }
     }
 
+    #[tool(description = "Windows 호스트에서 격리 실행한 프로그램(숨은 화면·가상 데스크톱)을 닫는다. 창에 닫기 요청을 보내 정상 종료를 기다리고, force=true 면 남은 프로세스를 강제 종료한다. 숨은 화면의 프로그램은 사용자가 볼 수 없으므로 시험이 끝나면 이 도구로 정리한다.")]
+    async fn window_close(&self, Parameters(p): Parameters<WindowCloseParams>) -> CallToolResult {
+        let host = match desk_host(&p.host) {
+            Ok(h) => h,
+            Err(e) => return err_text(e),
+        };
+        let body = format!(
+            "{}\n[ClaudyDesk.D]::CloseIsolated({}, ${}, 4000)",
+            desk_head_ps(),
+            p.pid.unwrap_or(0),
+            if p.force.unwrap_or(false) { "true" } else { "false" }
+        );
+        match run_simple(&host, &body, 60).await {
+            Ok(out) => {
+                log_audit("window_close", &p.host, &p.pid.map(|x| x.to_string()).unwrap_or_else(|| "전부".into()), Some(0), 0, false);
+                ok_text(format!("[{}] {}", p.host, out.trim()))
+            }
+            Err(e) => err_text(format!("[{}] 닫지 못했다: {e}", p.host)),
+        }
+    }
+
     #[tool(description = "Windows 호스트에서 이미 떠 있는 프로그램(COM 으로 뜬 Excel·한글 등)을 격리 대상에 올린다. 그 프로그램의 창을 시험용 가상 데스크톱으로 옮기고, 이후 새 창과 전경 가져가기도 감시기가 막는다.")]
     async fn window_isolate(&self, Parameters(p): Parameters<WindowIsolateParams>) -> CallToolResult {
         let host = match desk_host(&p.host) {
@@ -825,8 +884,11 @@ impl Claudy {
         let job = format!("export default async function({{ page, context, browser }}) {{\n{script}\n}}\n");
         let id = uuid::Uuid::new_v4().simple().to_string()[..10].to_string();
         let body = if windows {
-            let hidden = p.mode.as_deref().map(|m| m.trim().to_lowercase()).unwrap_or_else(|| "hidden".into()) != "desktop";
-            let pre = if p.isolate.unwrap_or(true) { browser_isolate_ps(&name, hidden) } else { String::new() };
+            let mode = p.mode.as_deref().map(|m| m.trim().to_lowercase()).unwrap_or_else(|| "hidden".into());
+            if !["hidden", "desktop", "visible"].contains(&mode.as_str()) {
+                return err_text("mode 는 hidden, desktop, visible 중 하나다".into());
+            }
+            let pre = if p.isolate.unwrap_or(true) || mode == "visible" { browser_isolate_ps(&name, &mode, p.relaunch.unwrap_or(false)) } else { String::new() };
             format!("{pre}{}", browser_ps(&name, &job, &id))
         } else {
             format!("{LINUX_GUI_ENV}{}", browser_sh(&name, &job, &id))
@@ -1329,14 +1391,22 @@ elseif ($r[1] -eq '0') {{ '창이 아직 없다(GPU 를 쓰는 앱은 숨은 화
 }
 
 /// Windows browser_run 앞부분: 디버깅 포트가 닫혀 있으면 브라우저를 격리 실행으로 띄운다
-fn browser_isolate_ps(name: &str, hidden: bool) -> String {
+fn browser_isolate_ps(name: &str, mode: &str, relaunch: bool) -> String {
+    let hidden = mode == "hidden";
+    let visible = mode == "visible";
     let port = match name {
         "edge" => 9232,
         "aside" => 9233,
         _ => 9231,
     };
     format!(
-        r#"$alive=$false; try {{ $alive=(Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200 }} catch {{}}
+        r#"if ({relaunch}) {{
+  $pd=Join-Path $env:USERPROFILE '.claudy\browser\profiles\{name}'
+  Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains($pd) -and $_.CommandLine -notmatch '--type=' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }}
+  for ($i=0; $i -lt 20; $i++) {{ try {{ Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 1 | Out-Null; Start-Sleep -Milliseconds 300 }} catch {{ break }} }}
+  [Console]::Error.WriteLine("[claudy] 떠 있던 {name} 조작용 브라우저를 닫았다")
+}}
+$alive=$false; try {{ $alive=(Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200 }} catch {{}}
 if (-not $alive) {{
 {head}
   $pf=$env:ProgramFiles; $pf86=${{env:ProgramFiles(x86)}}; $la=$env:LOCALAPPDATA
@@ -1346,8 +1416,8 @@ if (-not $alive) {{
     $prof=Join-Path $env:USERPROFILE '.claudy\browser\profiles\{name}'; New-Item -ItemType Directory -Force $prof | Out-Null
     {guard}
     $ba="--remote-debugging-port={port} `"--user-data-dir=$prof`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion"
-    $r=if ({hidden}) {{ ([ClaudyDesk.D]::LaunchHidden($bx, "$ba --disable-gpu", '', 15000)).Split(' ') }} else {{ ([ClaudyDesk.D]::Launch($bx, $ba, '', 'Claudy 시험', 15000)).Split(' ') }}
-    [Console]::Error.WriteLine("[claudy] {name} 을 격리 실행했다(pid $($r[0]), $(if ({hidden}) {{ '숨은 화면' }} else {{ '가상 데스크톱 「Claudy 시험」' }}))")
+    $r=if ({visible}) {{ $pp=Start-Process -FilePath $bx -ArgumentList $ba -PassThru; @($pp.Id, 1) }} elseif ({hidden}) {{ ([ClaudyDesk.D]::LaunchHidden($bx, "$ba --disable-gpu", '', 15000)).Split(' ') }} else {{ ([ClaudyDesk.D]::Launch($bx, $ba, '', 'Claudy 시험', 15000)).Split(' ') }}
+    [Console]::Error.WriteLine("[claudy] {name} 을 띄웠다(pid $($r[0]), $(if ({visible}) {{ '사용자 화면. 로그인을 마치면 relaunch=true 로 다시 숨긴다' }} elseif ({hidden}) {{ '숨은 화면' }} else {{ '가상 데스크톱 「Claudy 시험」' }}))")
     for ($i=0; $i -lt 60; $i++) {{ try {{ if ((Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 1).StatusCode -eq 200) {{ break }} }} catch {{}}; Start-Sleep -Milliseconds 300 }}
   }}
   $ErrorActionPreference='Continue'
@@ -1356,7 +1426,81 @@ if (-not $alive) {{
         head = desk_head_ps(),
         guard = DESK_GUARD_PS.replace('\n', "\n    "),
         hidden = if hidden { "$true" } else { "$false" },
+        visible = if visible { "$true" } else { "$false" },
+        relaunch = if relaunch { "$true" } else { "$false" },
     )
+}
+
+/// 공개 저장소(릴리스 파일을 받는 곳)
+const RELEASE_REPO: &str = "shindongseok304-cell/claudy";
+
+/// 받을 판. latest 면 공개 저장소의 최신 릴리스 태그
+async fn resolve_version(v: &str) -> Result<String, String> {
+    if v != "latest" {
+        return Ok(v.trim_start_matches('v').to_string());
+    }
+    let out = tokio::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("curl -fsSL https://api.github.com/repos/{RELEASE_REPO}/releases/latest | sed -n 's/.*\"tag_name\": *\"v\\{{0,1\\}}\\([^\"]*\\)\".*/\\1/p' | head -1"))
+        .output()
+        .await
+        .map_err(|e| format!("최신 판을 확인하지 못했다: {e}"))?;
+    let t = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if t.is_empty() { Err("최신 판을 확인하지 못했다(네트워크 확인)".into()) } else { Ok(t) }
+}
+
+async fn sh_run(script: &str, secs: u64) -> Result<String, String> {
+    let fut = tokio::process::Command::new("sh").arg("-c").arg(script).output();
+    let out = tokio::time::timeout(Duration::from_secs(secs), fut).await.map_err(|_| "제한 시간을 넘었다".to_string())?.map_err(|e| e.to_string())?;
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    if out.status.success() { Ok(text) } else { Err(text) }
+}
+
+/// macOS: 릴리스의 Mac 서버를 받아 로컬 서명(~/.claudy/sign/sign.sh 가 있으면)하고, 실행 중인 서버를 죽이지 않도록 새 이름으로 복사한 뒤 이름 바꾸기로 교체한다
+async fn self_update_mac(v: &str) -> Result<String, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("이 PC 자기 갱신은 macOS 만 된다".into());
+    }
+    let ver = resolve_version(v).await?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let ext = exe.parent().and_then(|p| p.parent()).ok_or("확장 폴더를 찾지 못했다")?.to_path_buf();
+    let script = format!(
+        r#"set -e
+T=$(mktemp -d); cd "$T"
+curl -fsSL -o m.zip "https://github.com/{repo}/releases/download/v{ver}/Claudy_v{ver}_Mac.zip"
+unzip -q m.zip; mkdir mc; unzip -q "Claudy_v{ver}_Mac/claudy-{ver}-mac.mcpb" -d mc
+if [ -x "$HOME/.claudy/sign/sign.sh" ]; then "$HOME/.claudy/sign/sign.sh" mc/server/claudy com.claudy.server >/dev/null 2>&1 && echo "로컬 인증서로 서명"; else codesign --force --sign - --identifier com.claudy.server mc/server/claudy && echo "ad-hoc 서명"; fi
+E={ext}
+cp mc/server/claudy "$E/server/claudy.new"; mv -f "$E/server/claudy.new" "$E/server/claudy"
+cp mc/manifest.json "$E/manifest.json.new"; mv -f "$E/manifest.json.new" "$E/manifest.json"
+"$E/server/claudy" --version
+rm -rf "$T""#,
+        repo = RELEASE_REPO,
+        ver = ver,
+        ext = util::sh_quote(&ext.to_string_lossy()),
+    );
+    let out = sh_run(&script, 300).await.map_err(|e| format!("갱신하지 못했다: {e}"))?;
+    Ok(format!("{}\n교체 완료. Claude 앱을 다시 켜면 v{ver} 가 적용된다", out.trim()))
+}
+
+/// Windows 원격 갱신용: 릴리스의 Windows zip 을 이 PC 에 받아 서버·manifest·설정 앱 경로를 돌려준다
+async fn fetch_windows_release(v: &str) -> Result<(String, String, String), String> {
+    if cfg!(windows) {
+        return Err("version 으로 받는 원격 갱신은 macOS·Linux 의 Claudy 에서 한다. Windows 에서는 파일 경로를 준다".into());
+    }
+    let ver = resolve_version(v).await?;
+    let dir = util::base_dir().join("updates").join(format!("v{ver}"));
+    let d = util::sh_quote(&dir.to_string_lossy());
+    let script = format!(
+        r#"set -e
+rm -rf {d}; mkdir -p {d}; cd {d}
+curl -fsSL -o w.zip "https://github.com/{repo}/releases/download/v{ver}/Claudy_v{ver}_Windows.zip"
+unzip -q w.zip; mkdir mc; unzip -q "Claudy_v{ver}_Windows/claudy-{ver}-windows.mcpb" -d mc"#,
+        repo = RELEASE_REPO,
+    );
+    sh_run(&script, 300).await.map_err(|e| format!("릴리스를 받지 못했다: {e}"))?;
+    let p = |x: &str| dir.join(x).to_string_lossy().to_string();
+    Ok((p("mc/server/claudy.exe"), p("mc/manifest.json"), p(&format!("Claudy_v{ver}_Windows/ClaudyManager.exe"))))
 }
 
 async fn run_simple(host: &config::HostCfg, cmd: &str, secs: u64) -> Result<String, String> {
@@ -1624,7 +1768,7 @@ mod desk_tests {
         let w = |n: &str, s: String| std::fs::write(format!("{dir}/{n}.ps1"), format!("\u{feff}{s}")).unwrap();
         w("open", app_open_isolated_ps("charmap", &[], 10, "Claudy 시험"));
         w("list", format!("{}\n[ClaudyDesk.D]::ListDesktops()\n'@@JSON'\n[ClaudyDesk.D]::ListWindows(0, $false)\n'@@GUARD'\n{}", desk_head_ps(), DESK_STATUS_PS));
-        w("browser", browser_isolate_ps("chrome", true));
+        w("browser", browser_isolate_ps("chrome", "hidden", false));
         w("hidden", app_open_hidden_ps("charmap", &[], 10));
     }
 }

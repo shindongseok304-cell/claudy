@@ -485,7 +485,18 @@ fn automation_value(st: &AppState) -> Value {
         "deskReady": ready,
         "deskRuns": runs,
         "tunnelLog": tail_lines(&st.dd.dir.join("tunnel.log"), 8),
+        "iso": iso_value(st),
+        "isoLog": tail_lines(&st.dd.dir.join("isolate.log"), 12),
     })
+}
+
+#[cfg(windows)]
+fn iso_value(st: &AppState) -> Value {
+    crate::isolation::status(&st.dd.dir)
+}
+#[cfg(not(windows))]
+fn iso_value(_st: &AppState) -> Value {
+    json!({"guard": false, "procs": []})
 }
 
 fn tunnel_value(st: &AppState) -> Value {
@@ -604,6 +615,13 @@ pub fn dispatch(st: &Shared, cmd: &str, args: &Value) -> Result<Value, String> {
         "behavior.get" => Ok(behavior_value(&lock(st).behavior)),
         "tunnel.status" => Ok(tunnel_value(&lock(st))),
         "automation.status" => Ok(automation_value(&lock(st))),
+        "isolation.close_all" => {
+            #[cfg(windows)]
+            let n = crate::isolation::close_all(&lock(st).dd.dir);
+            #[cfg(not(windows))]
+            let n = 0usize;
+            Ok(json!({"closed": n}))
+        }
         "behavior.set" => cmd_behavior_set(&mut lock(st), args),
         other => Err(format!("알 수 없는 명령입니다: {other}")),
     }

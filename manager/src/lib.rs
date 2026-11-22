@@ -5,6 +5,8 @@ pub mod api;
 pub mod deskrun;
 #[cfg(windows)]
 pub mod hwpguard;
+#[cfg(windows)]
+pub mod isolation;
 pub mod jobs;
 pub mod keyinstall;
 pub mod logs;
