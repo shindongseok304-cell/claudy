@@ -30,7 +30,7 @@ jobs:
           $src = Get-Content -Raw -Encoding UTF8 server/res/claudy_desk.cs
           Add-Type -TypeDefinition $src -ReferencedAssemblies System.Drawing,System.Management -OutputAssembly "$env:RUNNER_TEMP\ClaudyDesk.dll" -OutputType Library
           Add-Type -Path "$env:RUNNER_TEMP\ClaudyDesk.dll"
-          "컴파일 완료"
+          "compiled"
       - name: 숨은 화면 동작 확인
         continue-on-error: true
         shell: powershell
