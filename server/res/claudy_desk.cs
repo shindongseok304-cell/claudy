@@ -454,14 +454,24 @@ namespace ClaudyDesk
             }
             var left = new List<string>(); int killed = 0;
             var after = W.Procs();
+            if (force)
+            {
+                // 부모를 먼저 끝내면 자식(브라우저 렌더러 등)도 따라 끝나므로, 끝낸 뒤 다시 세어 남은 것만 알린다
+                foreach (var p in targets) if (after.ContainsKey(p)) { try { Process.GetProcessById(p).Kill(); killed++; } catch { } }
+                var kend = DateTime.UtcNow.AddMilliseconds(3000);
+                while (DateTime.UtcNow < kend)
+                {
+                    after = W.Procs(); bool any = false;
+                    foreach (var p in targets) if (after.ContainsKey(p)) { any = true; break; }
+                    if (!any) break;
+                    Thread.Sleep(200);
+                }
+            }
             foreach (var p in targets)
             {
-                if (!after.ContainsKey(p)) continue;
-                KeyValuePair<int, string> e; string exe = after.TryGetValue(p, out e) ? e.Value : "?";
-                if (force) { try { Process.GetProcessById(p).Kill(); killed++; continue; } catch { } }
-                left.Add(exe + "(" + p + ")");
+                KeyValuePair<int, string> e;
+                if (after.TryGetValue(p, out e)) left.Add(e.Value + "(" + p + ")");
             }
-            if (killed > 0) Thread.Sleep(300);
             int pruned = PruneWatch();
             Log("격리 프로그램 닫기: 대상 " + targets.Count + ", 닫기 요청 창 " + posted + ", 강제 종료 " + killed + ", 남음 " + left.Count + ", 목록 정리 " + pruned);
             string r = string.Format("대상 프로세스 {0}개, 닫기 요청한 창 {1}개, 강제 종료 {2}개", targets.Count, posted, killed);
