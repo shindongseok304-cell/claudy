@@ -148,14 +148,17 @@ pub fn desktop_launcher() -> String {
     format!(
         r#"$id=[guid]::NewGuid().ToString('N').Substring(0,10)
 $dir=Join-Path $env:TEMP "claudy-$id"; New-Item -ItemType Directory -Path $dir | Out-Null
+$rlog=Join-Path $env:USERPROFILE '.claudy\remote.log'
+function RL($m) {{ try {{ if ((Test-Path $rlog) -and (Get-Item $rlog).Length -gt 1MB) {{ Move-Item -Force $rlog "$rlog.1" }}; [IO.File]::AppendAllText($rlog, (Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') + " $id $m`r`n") }} catch {{}} }}
+RL "시작 길이 $($payload.Length)"
 $utf8=New-Object Text.UTF8Encoding $true
 [IO.File]::WriteAllText("$dir\body.ps1", $payload, $utf8)
 $run = @"
-New-Item -ItemType File -Path '$dir\started' | Out-Null
+Set-Content -Path '$dir\started' -Value (Get-Date -Format 'HH:mm:ss.fff')
 `$env:PYTHONIOENCODING='utf-8'
 cmd /c "chcp 65001 >nul & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$dir\body.ps1`" > `"$dir\out.txt`" 2> `"$dir\err.txt`""
 Set-Content -Path '$dir\code' -Value `$LASTEXITCODE
-New-Item -ItemType File -Path '$dir\done' | Out-Null
+Set-Content -Path '$dir\done' -Value (Get-Date -Format 'HH:mm:ss.fff')
 "@
 [IO.File]::WriteAllText("$dir\run.ps1", $run, $utf8)
 # 설정 앱(0.6.7 이상)이 떠 있으면 파이프로 실행을 맡긴다(예약 작업보다 4~5초 빠르다)
@@ -168,6 +171,7 @@ try {{
   $ans=(New-Object IO.StreamReader($pc)).ReadLine()
   $pc.Dispose()
 }} catch {{ $ans=$null }}
+RL "파이프 $ans"
 if ($ans -ne 'OK') {{
 $task="Claudy-$id"
 $act=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dir\run.ps1`""
@@ -179,12 +183,14 @@ Start-ScheduledTask -TaskName $task
 $t0=Get-Date
 while (-not (Test-Path "$dir\done")) {{
   Start-Sleep -Milliseconds 100
+  if (((Get-Date)-$t0).TotalMinutes -gt 31) {{ RL "기다림 중단(31분)"; exit 124 }}
   if (-not (Test-Path "$dir\started") -and ((Get-Date)-$t0).TotalSeconds -gt 15) {{
     if ($task) {{ Unregister-ScheduledTask -TaskName $task -Confirm:$false }}
     [Console]::Error.WriteLine('화면 세션에서 실행하지 못했다. 이 PC 에 사용자가 로그온해 있어야 한다(잠금 화면은 괜찮다)')
     exit 125
   }}
 }}
+RL "본문 시작 $((Get-Content "$dir\started" -EA 0) -join '') 끝 $((Get-Content "$dir\done" -EA 0) -join '') 코드 $((Get-Content "$dir\code" -EA 0) -join '')"
 if ($task) {{ Unregister-ScheduledTask -TaskName $task -Confirm:$false }}
 $strict=New-Object Text.UTF8Encoding $false, $true
 $rd={{ param($f) if (-not (Test-Path $f)) {{ return '' }}; $b=[IO.File]::ReadAllBytes($f); try {{ $strict.GetString($b).TrimStart([char]0xFEFF) }} catch {{ [Text.Encoding]::Default.GetString($b) }} }}
@@ -192,6 +198,7 @@ $rd={{ param($f) if (-not (Test-Path $f)) {{ return '' }}; $b=[IO.File]::ReadAll
 $e=(& $rd "$dir\err.txt"); if ($e) {{ [Console]::Error.Write($e) }}
 $code=[int]((& $rd "$dir\code").Trim())
 Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+RL "끝"
 exit $code"#
     )
 }
