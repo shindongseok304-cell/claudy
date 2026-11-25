@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "claudy",
   "display_name": "Claudy",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "description": "Claude 채팅에서 이 PC와 SSH 서버의 명령, Claude Code(claude -p)를 실행한다.",
   "long_description": "Claudy 는 Rust 로 만든 로컬 MCP 서버다. 등록한 호스트(이 컴퓨터 또는 SSH 서버)에서 셸 명령을 실행하고, Claude Code 에 프롬프트를 보내 결과를 받는다. 긴 작업은 백그라운드로 띄워 상태를 확인할 수 있다. 호스트 설정은 사용자 폴더의 .claudy/hosts.toml 에 둔다.",
   "author": {

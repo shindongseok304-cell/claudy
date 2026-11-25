@@ -1,6 +1,6 @@
 [package]
 name = "claudy-manager"
-version = "0.6.9"
+version = "0.6.10"
 edition = "2024"
 description = "Claudy 설정 프로그램 (Windows WebView2, macOS WKWebView, Linux WebKitGTK 화면)"
 

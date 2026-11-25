@@ -271,7 +271,7 @@ window.__demo=(function(){
     },
     'jobs.list':()=>({rows:D.jobs.map(j=>({id:j.id,host:j.host,kind:j.kind,started:j.started,state:j.state,label:j.label,code:j.code}))}),
     'jobs.log':a=>({text:(D.jobs.find(j=>j.id===a.id)||{log:''}).log}),
-    'app.info':()=>({version:'0.6.9',dataDir:'C:\\Users\\user\\.claudy',hostsFile:'C:\\Users\\user\\.claudy\\hosts.toml'}),
+    'app.info':()=>({version:'0.6.10',dataDir:'C:\\Users\\user\\.claudy',hostsFile:'C:\\Users\\user\\.claudy\\hosts.toml'}),
     'app.status':()=>({running:!q.includes('off'),hosts:D.hosts.length}),
     'behavior.get':()=>clone(D.beh),
     'behavior.set':a=>{Object.assign(D.beh,a);return clone(D.beh)},
@@ -473,7 +473,7 @@ function autoCard(){
   const plist=(I.procs||[]).map(p=>esc(p.exe)+' (pid '+p.pid+', '+esc(p.mode)+')').join('\n')||'격리 실행 중인 프로그램이 없습니다';
   const isoCard=grp('시험 격리',card(
     row('감시기','시험 프로그램의 새 창과 화면 가져가기를 막습니다(가상 데스크톱 방식)',I.guard?'<span class="bd"><i class="dot ok"></i>실행 중</span>':'<span class="bd"><i class="dot"></i>꺼짐</span>')+
-    row('격리 실행 중','숨은 화면의 프로그램은 화면에 보이지 않습니다',(I.procs||[]).length+'개 '+((I.procs||[]).length?'<button class="btn" data-a="isoClose">모두 닫기</button>':''))+
+    row('격리 실행 중','숨은 화면의 프로그램은 화면에 보이지 않습니다',(I.procs||[]).length+'개 '+((I.procs||[]).length?'<button class="btn sec" data-a="isoClose">모두 닫기</button>':''))+
     '<div class="row startup"><div class="logbox">'+plist+'</div></div>'),'Claude 가 시험용으로 띄운 프로그램입니다. 「모두 닫기」는 저장하지 않은 작업까지 닫습니다')+
     grp('격리 기록',card('<div class="logbox">'+esc((A.isoLog||[]).slice().reverse().join('\n')||'기록이 없습니다')+'</div>'));
   return isoCard+grp('한글 자동화',card(row('「접근 허용」 창 자동 승인','한글이 띄운 보안 확인 창에만 「모두 허용」을 누릅니다',tg('hwpGuard',A.hwpGuard))+
@@ -713,13 +713,13 @@ document.addEventListener('click',async e=>{
    case 'pickwd':{const s=selHost(false);const p=await pick('pick.folder','작업 폴더 선택');if(p){const r=await call('claude.set',{name:s.h.name,workdir:p});if(r.saved){S.hosts=r.hosts;render(true);flash()}}break}
    case 'pickkey':{const s=selHost(true);const p=await pick('pick.file','개인 키 파일 선택','');if(p){const r=await call('hosts.save',{original:s.h.name,host:{identity_file:p}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}break}
    case 'clkey':{const s=selHost(true);const r=await call('hosts.save',{original:s.h.name,host:{identity_file:''}});if(r.saved){S.hosts=r.hosts;render(true);flash()}break}
+   case 'isoClose':{if(confirm('격리 실행 중인 프로그램을 모두 닫습니다. 저장하지 않은 작업은 사라집니다.')){try{await call('isolation.close_all')}catch(err){}await loadTunnel();render(true);flash()}break}
    case 'tg':{
      const k=el.dataset.k;
      if(k==='asRoot'){const F=S.F;await doSave();const hh=S.hosts.find(x=>x.name===F.orig);if(!hh)break;const r=await call('hosts.save',{original:hh.name,host:{run_as_root:!hh.run_as_root}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
      else if(k==='desktop'){const F=S.F;await doSave();const hh=S.hosts.find(x=>x.name===F.orig);if(!hh)break;const r=await call('hosts.save',{original:hh.name,host:{desktop:!hh.desktop}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
      else if(k==='tunnel'){const v=!S.beh.tunnel;try{S.beh=await call('behavior.set',{tunnel:v})}catch(err){S.tunErr=err.message}render(true);flash();setTimeout(loadTunnel,1500);setTimeout(loadTunnel,7000)}
      else if(k==='autoKey'){const s=selHost(true);if(!s.h)break;const r=await call('hosts.save',{original:s.h.name,host:{accept_new_host_key:!s.h.accept_new_host_key}});if(r.saved){S.hosts=r.hosts;render(true);flash()}}
-     else if(k==='isoClose'){if(confirm('격리 실행 중인 프로그램을 모두 닫습니다. 저장하지 않은 작업은 사라집니다.')){try{await call('isolation.close_all')}catch(err){}await loadTunnel();render(true);flash()}}
      else if(k==='hwpGuard'){const v=!(S.auto&&S.auto.hwpGuard);S.auto.hwpGuard=v;render(true);S.beh=await call('behavior.set',{hwpGuard:v});await loadTunnel();flash()}
      else{const v=!S.beh[k];S.beh[k]=v;render(true);const o={};o[k]=v;S.beh=await call('behavior.set',o);render(true);flash()}
      break}
