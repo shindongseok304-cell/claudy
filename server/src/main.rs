@@ -281,7 +281,7 @@ pub struct BrowserRunParams {
     pub guide: Option<bool>,
     /// Windows: 브라우저를 새로 띄울 때 격리한다. 기본 true(숨은 화면, GPU 끔)
     pub isolate: Option<bool>,
-    /// Windows 격리 방식. hidden(기본, 숨은 화면), desktop(가상 데스크톱 「Claudy 시험」), visible(사용자 화면에 보통 창으로. 2단계 인증처럼 사용자가 직접 로그인할 때)
+    /// Windows 격리 방식. hidden(기본, 숨은 화면. 브라우저는 이것을 권장), desktop(가상 데스크톱 「Claudy 시험」. 창 없이 띄운 뒤 최소화·백그라운드 창을 만들어 전경을 가져가지 않게 함. 스크립트에서 새 창을 열지 말고 새 탭을 쓸 것), visible(사용자 화면에 보통 창으로. 2단계 인증처럼 사용자가 직접 로그인할 때. 끝나면 relaunch=true 로 다시 숨김)
     pub mode: Option<String>,
     /// 이미 떠 있는 조작용 브라우저를 닫고 mode 대로 다시 띄운다. 숨은 화면 브라우저를 사용자에게 보여 로그인시키거나, 로그인 뒤 다시 숨길 때. 기본 false
     pub relaunch: Option<bool>,
@@ -1236,6 +1236,7 @@ const DESK_GUARD_PS: &str = r#"[void][ClaudyDesk.D]::StartGuard($dll)"#;
 /// 감시기 상태와 최근 기록
 const DESK_STATUS_PS: &str = r#"$gm=$null; try { $gm=[Threading.Mutex]::OpenExisting('Local\ClaudyDeskGuard') } catch {}
 if ($gm) { $gm.Dispose(); '감시기: 실행 중' } else { '감시기: 꺼짐(격리 실행하면 켜진다)' }
+[void][ClaudyDesk.D]::PruneWatch()
 "격리 대상 pid: $(([ClaudyDesk.D]::Watched() | ForEach-Object { $_ }) -join ', ')"
 $lf=[ClaudyDesk.D]::LogFile; if (Test-Path $lf) { '최근 기록:'; Get-Content $lf -Encoding UTF8 -Tail 8 }"#;
 
@@ -1400,7 +1401,8 @@ fn browser_isolate_ps(name: &str, mode: &str, relaunch: bool) -> String {
         _ => 9231,
     };
     format!(
-        r#"if ({relaunch}) {{
+        r#"$env:CLAUDY_BG_WINDOW = if ({desk}) {{ '1' }} else {{ '' }}
+if ({relaunch}) {{
   $pd=Join-Path $env:USERPROFILE '.claudy\browser\profiles\{name}'
   Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains($pd) -and $_.CommandLine -notmatch '--type=' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }}
   for ($i=0; $i -lt 20; $i++) {{ try {{ Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 1 | Out-Null; Start-Sleep -Milliseconds 300 }} catch {{ break }} }}
@@ -1416,7 +1418,7 @@ if (-not $alive) {{
     $prof=Join-Path $env:USERPROFILE '.claudy\browser\profiles\{name}'; New-Item -ItemType Directory -Force $prof | Out-Null
     {guard}
     $ba="--remote-debugging-port={port} `"--user-data-dir=$prof`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion"
-    $r=if ({visible}) {{ $pp=Start-Process -FilePath $bx -ArgumentList $ba -PassThru; @($pp.Id, 1) }} elseif ({hidden}) {{ ([ClaudyDesk.D]::LaunchHidden($bx, "$ba --disable-gpu", '', 15000)).Split(' ') }} else {{ ([ClaudyDesk.D]::Launch($bx, $ba, '', 'Claudy 시험', 15000)).Split(' ') }}
+    $r=if ({visible}) {{ $pp=Start-Process -FilePath $bx -ArgumentList $ba -PassThru; @($pp.Id, 1) }} elseif ({hidden}) {{ ([ClaudyDesk.D]::LaunchHidden($bx, "$ba --disable-gpu", '', 15000)).Split(' ') }} else {{ ([ClaudyDesk.D]::Launch($bx, "$ba --no-startup-window", '', 'Claudy 시험', 1500)).Split(' ') }}
     [Console]::Error.WriteLine("[claudy] {name} 을 띄웠다(pid $($r[0]), $(if ({visible}) {{ '사용자 화면. 로그인을 마치면 relaunch=true 로 다시 숨긴다' }} elseif ({hidden}) {{ '숨은 화면' }} else {{ '가상 데스크톱 「Claudy 시험」' }}))")
     for ($i=0; $i -lt 60; $i++) {{ try {{ if ((Invoke-WebRequest "http://127.0.0.1:{port}/json/version" -UseBasicParsing -TimeoutSec 1).StatusCode -eq 200) {{ break }} }} catch {{}}; Start-Sleep -Milliseconds 300 }}
   }}
@@ -1428,6 +1430,7 @@ if (-not $alive) {{
         hidden = if hidden { "$true" } else { "$false" },
         visible = if visible { "$true" } else { "$false" },
         relaunch = if relaunch { "$true" } else { "$false" },
+        desk = if !hidden && !visible { "$true" } else { "$false" },
     )
 }
 

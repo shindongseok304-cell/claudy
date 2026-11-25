@@ -78,7 +78,18 @@ async function main() {
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   try {
     const context = browser.contexts()[0] || (await browser.newContext());
-    const page = context.pages().find((p) => !p.url().startsWith('chrome-extension://')) || (await context.newPage());
+    const usable = () => context.pages().find((p) => !p.url().startsWith('chrome-extension://'));
+    let page = usable();
+    if (!page && process.env.CLAUDY_BG_WINDOW === '1') {
+      // 가상 데스크톱 격리: 브라우저는 창 없이(--no-startup-window) 띄웠다. 창을 최소화·백그라운드로 만들어 전경을 가져가지 않게 하고,
+      // 감시기가 그 창을 「Claudy 시험」 으로 옮겨 펼친다(11.25 실측: 사용자 전경 변화 없음)
+      try {
+        const s = await browser.newBrowserCDPSession();
+        await s.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true, windowState: 'minimized' });
+        for (let i = 0; i < 30 && !(page = usable()); i++) await new Promise((r) => setTimeout(r, 100));
+      } catch {}
+    }
+    if (!page) page = await context.newPage();
     const job = await import(pathToFileURL(jobFile).href);
     const out = await job.default({ page, context, browser });
     if (out !== undefined) console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));

@@ -40,3 +40,4 @@ jobs:
           Start-Sleep 2
           [ClaudyDesk.D]::ListWindows(0, $false)
           [ClaudyDesk.D]::CloseIsolated(0, $true, 3000)
+          "left in watch list: " + [ClaudyDesk.D]::Watched().Count

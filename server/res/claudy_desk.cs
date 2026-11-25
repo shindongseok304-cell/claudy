@@ -259,6 +259,19 @@ namespace ClaudyDesk
             try { foreach (var line in File.ReadAllLines(PidFile)) { var p = line.Split('\t'); int v; if (p.Length > 0 && int.TryParse(p[0], out v)) s.Add(v); } } catch { }
             return s;
         }
+        /// 끝난 프로세스를 감시 목록에서 지운다. 지운 개수
+        public static int PruneWatch()
+        {
+            try
+            {
+                if (!File.Exists(PidFile)) return 0;
+                var alive = W.Procs(); var keep = new List<string>(); int gone = 0;
+                foreach (var line in File.ReadAllLines(PidFile)) { int v; var p = line.Split('\t'); if (int.TryParse(p[0], out v) && alive.ContainsKey(v)) keep.Add(line); else gone++; }
+                if (gone > 0) File.WriteAllLines(PidFile, keep.ToArray(), new UTF8Encoding(false));
+                return gone;
+            }
+            catch { return 0; }
+        }
         static string DesktopFor(int pid)
         {
             try { foreach (var line in File.ReadAllLines(PidFile)) { var p = line.Split('\t'); if (p.Length > 1 && p[0] == pid.ToString()) return p[1]; } } catch { }
@@ -448,7 +461,9 @@ namespace ClaudyDesk
                 if (force) { try { Process.GetProcessById(p).Kill(); killed++; continue; } catch { } }
                 left.Add(exe + "(" + p + ")");
             }
-            Log("격리 프로그램 닫기: 대상 " + targets.Count + ", 닫기 요청 창 " + posted + ", 강제 종료 " + killed + ", 남음 " + left.Count);
+            if (killed > 0) Thread.Sleep(300);
+            int pruned = PruneWatch();
+            Log("격리 프로그램 닫기: 대상 " + targets.Count + ", 닫기 요청 창 " + posted + ", 강제 종료 " + killed + ", 남음 " + left.Count + ", 목록 정리 " + pruned);
             string r = string.Format("대상 프로세스 {0}개, 닫기 요청한 창 {1}개, 강제 종료 {2}개", targets.Count, posted, killed);
             if (left.Count > 0) r += "\n안 닫힌 프로세스: " + string.Join(", ", left.ToArray()) + "\n저장 확인 같은 대화 상자가 떠 있을 수 있다. window_capture 로 확인하거나 force=true 로 강제 종료한다";
             return r;

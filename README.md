@@ -15,7 +15,7 @@ Claudy 는 PuTTY 같은 SSH 접속 프로그램의 역할을 Claude 채팅에서
 | `server/` | MCP 서버(Rust, rmcp). 실행 파일 하나 |
 | `manager/` | 설정 앱(Rust, tao·wry). Windows WebView2, macOS WKWebView, Linux WebKitGTK |
 
-## 도구 (서버 0.1.32, 18종)
+## 도구 (서버 0.1.33, 18종)
 
 | 도구 | 기능 |
 |---|---|
