@@ -82,6 +82,9 @@ namespace ClaudyDesk
         [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int cmd);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int InternalGetWindowText(IntPtr h, StringBuilder s, int n);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW")] static extern IntPtr SmtText(IntPtr h, uint msg, IntPtr w, StringBuilder l, uint flags, uint ms, out IntPtr res);
+        [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr h);
         [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
         [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
@@ -99,7 +102,13 @@ namespace ClaudyDesk
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern bool Process32First(IntPtr h, ref PROCESSENTRY32 e);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern bool Process32Next(IntPtr h, ref PROCESSENTRY32 e);
         public static string Cls(IntPtr h) { var sb = new StringBuilder(256); GetClassName(h, sb, 256); return sb.ToString(); }
-        public static string Title(IntPtr h) { var sb = new StringBuilder(512); GetWindowText(h, sb, 512); return sb.ToString(); }
+        /// 창 제목. 응답 없는 창에 막히지 않도록 WM_GETTEXT 는 1초 제한(SMTO_ABORTIFHUNG), 실패하면 메시지 없이 읽는 InternalGetWindowText
+        public static string Title(IntPtr h)
+        {
+            var sb = new StringBuilder(512); IntPtr r;
+            if (SmtText(h, 0x000D, (IntPtr)512, sb, 0x0003, 1000, out r) != IntPtr.Zero) return sb.ToString();
+            sb.Length = 0; InternalGetWindowText(h, sb, 512); return sb.ToString();
+        }
         public static int Pid(IntPtr h) { int p; GetWindowThreadProcessId(h, out p); return p; }
         public static bool Cloaked(IntPtr h) { int c; return DwmGetWindowAttribute(h, 14, out c, 4) == 0 && c != 0; }
         /// pid → (부모 pid, 실행 파일 이름)
@@ -555,6 +564,7 @@ namespace ClaudyDesk
                     using (var g = Graphics.FromImage(bmp))
                     {
                         IntPtr dc = g.GetHdc();
+                        if (W.IsHungAppWindow(h)) throw new Exception("창 응답 없음(프로그램이 바쁘거나 멈춤). 잠시 뒤 다시 찍는다");
                         bool ok = W.PrintWindow(h, dc, 2);
                         g.ReleaseHdc(dc);
                         if (!ok) throw new Exception("PrintWindow 실패");
